@@ -3,9 +3,18 @@
 # Chunks are planned by arco-make for each block (`arco-make download --plan` prints them).
 # The whole download takes a few days: the profile in [save] storage_options must allow that.
 time_dim = "time"
-start = 1993-01-01T00:00:00
-end = 2024-01-01T00:00:00
-step = "128D"
+# Dates come from the command (--start, --end; --extend appends to an output): see README.
+# 32-day blocks: about 25 s per day of data, memory levels off (arco-make logbook, 18 Nov).
+step = "32D"
+
+# The target grid of every regrid step, named by them.
+[grids.target]
+south = -90.0
+north = 90.0
+west = 0.0
+east = 359.0
+resolution_lat = 1.0
+resolution_lon = 1.0
 
 [[datasets.era5.parts]]
 filename_or_obj = "gs://gcp-public-data-arco-era5/ar/full_37-1h-0p25deg-chunk-1.zarr-v3"
@@ -31,7 +40,7 @@ name = "regrid"
 method = "conservative"
 latitude_dim = "latitude"
 longitude_dim = "longitude"
-grid = {south = -90.0, north = 90.0, west = 0.0, east = 359.0, resolution_lat = 1.0, resolution_lon = 1.0}
+grid = "target"
 
 [[datasets.era5.postprocess]]
 name = "resample"
@@ -48,7 +57,7 @@ name = "rename"
 10m_v_component_of_wind = "10v"
 2m_dewpoint_temperature = "2d"
 2m_temperature = "2t"
-mean_sea_level_pressure = "msl"
+mean_sea_level_pressure = "mslp"
 
 [[datasets.era5.postprocess]]
 name = "rename_coordinates"
@@ -86,7 +95,7 @@ name = "regrid"
 method = "conservative"
 latitude_dim = "latitude"
 longitude_dim = "longitude"
-grid = {south = -90.0, north = 90.0, west = 0.0, east = 359.0, resolution_lat = 1.0, resolution_lon = 1.0}
+grid = "target"
 
 [[datasets.era5_static.postprocess]]
 name = "rename"
@@ -132,7 +141,7 @@ name = "regrid"
 method = "conservative"
 latitude_dim = "latitude"
 longitude_dim = "longitude"
-grid = {south = -90.0, north = 90.0, west = 0.0, east = 359.0, resolution_lat = 1.0, resolution_lon = 1.0}
+grid = "target"
 
 [[datasets.era5_cumulative.postprocess]]
 name = "clip_negative"
@@ -211,7 +220,7 @@ latitude_dim = "latitude"
 longitude_dim = "longitude"
 kwargs = {skipna = false}
 conservation_tolerance = 1e-6
-grid = {south = -90.0, north = 90.0, west = 0.0, east = 359.0, resolution_lat = 1.0, resolution_lon = 1.0}
+grid = "target"
 
 # No river south of GloFAS's domain (-60): 0 there, where the regridding leaves NaN.
 [[datasets.glofas.postprocess]]
@@ -261,7 +270,7 @@ method = "conservative"
 latitude_dim = "latitude"
 longitude_dim = "longitude"
 kwargs = {skipna = true, nan_threshold = 1.0}
-grid = {south = -90.0, north = 90.0, west = 0.0, east = 359.0, resolution_lat = 1.0, resolution_lon = 1.0}
+grid = "target"
 
 [[datasets.glorys.postprocess]]
 name = "astype"
@@ -308,7 +317,7 @@ method = "conservative"
 latitude_dim = "latitude"
 longitude_dim = "longitude"
 kwargs = {skipna = false}
-grid = {south = -90.0, north = 90.0, west = 0.0, east = 359.0, resolution_lat = 1.0, resolution_lon = 1.0}
+grid = "target"
 
 [[datasets.glorys_seaice.postprocess]]
 name = "astype"
@@ -364,7 +373,7 @@ method = "conservative"
 latitude_dim = "latitude"
 longitude_dim = "longitude"
 kwargs = {skipna = false}
-grid = {south = -90.0, north = 90.0, west = 0.0, east = 359.0, resolution_lat = 1.0, resolution_lon = 1.0}
+grid = "target"
 
 # No sea south of GLORYS's domain (-80): 0 there, where the regridding leaves NaN.
 [[datasets.glorys_static.postprocess]]
@@ -603,31 +612,41 @@ Conventions = "CF-1.8, ACDD-1.3"
 institution = "National Institute of Oceanography and Applied Geophysics - OGS"
 creator_name = "OGS ARCO-OCEAN Development Team"
 source = "Merged retrospective reanalyses and hindcasts: CMEMS GLORYS12 (ocean & sea ice), ECMWF ERA5 (atmosphere), and GloFAS v5.0 (river discharge)."
-history = "Interpolated from native grids to global 1.0 deg regular grid and written to daily-chunked Zarr format."
+history = "Regridded conservatively from the native grids to a global 1.0 deg regular grid; written as an Icechunk repository (Zarr v3), in chunks of one day and level, sharded by 8 days and all levels."
 license = "CC-BY-4.0"
-attribution = "Contains modified Copernicus Climate Change Service (C3S) and Copernicus Marine Environment Monitoring Service (CMEMS) information."
+attribution = "Contains modified Copernicus Climate Change Service (C3S) information (ERA5), E.U. Copernicus Marine Service information (CMEMS, GLORYS12) and Copernicus Emergency Management Service (CEMS) information (GloFAS). Neither the European Commission nor ECMWF nor Mercator Ocean International is responsible for any use that may be made of the Copernicus information or data it contains."
 references = "https://github.com/inogs/arco-ocean"
-geospatial_lat_min = -90.0
-geospatial_lat_max = 90.0
-geospatial_lat_units = "degrees_north"
-geospatial_lat_resolution = "1.0 degree"
-geospatial_lon_min = -180.0
-geospatial_lon_max = 180.0
-geospatial_lon_units = "degrees_east"
-geospatial_lon_resolution = "1.0 degree"
-geospatial_vertical_min = 0.494
-geospatial_vertical_max = 5274.784
-geospatial_vertical_units = "m"
-geospatial_vertical_positive = "down"
-time_coverage_start = "1993-01-01T00:00:00Z"
-time_coverage_end = "2023-12-31T00:00:00Z"
-time_coverage_resolution = "P1D"
 featureType = "grid"
+
+# The extent attributes (ACDD) from the coordinates: the time coverage is the whole output's.
+[[postprocess]]
+name = "coverage_attrs"
+vertical_dim = "depth"
+
+# Checked on each block before its commit: a block that fails is not committed, and the run
+# can resume once the cause is fixed. `arco-make validate` checks a whole output.
+[checks.valid_time_coordinate]
+freq = "1D"
+
+[checks.valid_global_ecmwf_coordinates]
+latitude_dim = "lat"
+longitude_dim = "lon"
+
+# Ocean and sea-ice fields exactly inside the sea; every other variable everywhere.
+[checks.ensure_no_nans]
+exact = true
+seafrac = ["thetao", "so", "uo", "vo", "zos", "siconc", "sivol", "usic", "vsic"]
+
+[checks.attributes]
 
 [save]
 # Versions kept: the current one and the previous one (to go back once).
 keep_versions = 2
 chunks = {time = 1, depth = 1, lat = -1, lon = -1}
+# Shards of 8 days and all levels, a day's levels next to each other: about 120 objects per
+# 32-day block instead of 7,200 (arco-make logbook, 18 Nov).
+shards = {time = 8, depth = -1, lat = -1, lon = -1}
+shard_order = "lexicographic"
 compressors = [{name = "blosc", configuration = {cname = "lz4", clevel = 1, shuffle = "shuffle"}}]
 
 [save.encoding.time]

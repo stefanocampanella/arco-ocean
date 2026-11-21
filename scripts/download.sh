@@ -4,12 +4,14 @@
 #
 # Download one ARCO-OCEAN dataset with arco-make, in one resumable run.
 #
-# The whole time range of the recipe (or --start/--end) is written to one Icechunk repository,
-# block after block, each block a commit on the run's own branch; the repository's `main` moves
-# to the new version only when every block is written. If the run fails, it is attempted again
-# with `arco-make download --resume`, which keeps the blocks already committed and writes the
-# others (up to --attempts runs in all). Transient network errors are already retried inside
-# arco-make, block by block (the recipe's [retries]).
+# The recipes have no dates: [--start, --end) is written to one Icechunk repository, or, with
+# --extend, the days after the repository's last up to --end. Block after block, each block a
+# commit on the run's own branch; the repository's `main` moves to the new version only when
+# every block is written. If the run fails, it is attempted again with `arco-make download
+# --resume` (`--extend --resume` for an extension), which keeps the blocks already committed and
+# writes the others (up to --attempts runs in all). Transient network errors are already retried
+# inside arco-make, block by block (the recipe's [retries]). It needs arco-make with `--extend`
+# and recipes without dates: an image built after the arco-make stack is merged.
 
 usage() {
     cat <<EOF
@@ -31,11 +33,12 @@ DESCRIPTION
         --output PATH           Output repository: a directory, s3:// or gs:// URL (default:
                                 \$DATA_ROOT/data/<product>/res=<res>, from the recipe name).
         --log-dir DIR           Where to write the log (default: \${PROJECT_ROOT}/logs/download).
-        --start DATE            Override the recipe's start (YYYY-MM-DD).
-        --end DATE              Override the recipe's end (YYYY-MM-DD).
+        --start DATE            First day (YYYY-MM-DD): the recipes have no dates. Not with --extend.
+        --end DATE              The day after the last (YYYY-MM-DD). Required.
+        --extend                Append the days after the output's last, up to --end, as a new
+                                version (arco-make --extend; resumed with --resume).
         --replace               Write a new version of an existing output (arco-make --replace).
         --resume                Continue a run that failed earlier (arco-make --resume).
-        --blocks N              Blocks read and processed at once (arco-make --blocks; default: 1).
         --attempts N            Runs in all, the later ones resuming (default: 3).
         --retry-delay SECONDS   Wait between runs (default: 60).
         --image IMAGE           Apptainer image (default: oras://ghcr.io/stefanocampanella/arco-make:latest).
@@ -44,6 +47,10 @@ DESCRIPTION
         --bind SRC[:DST[:OPTS]] Path to bind within the Apptainer container (repeatable).
         --log-level LEVEL       debug, info, warning, error or critical (default: info).
         -h, --help              Show this help.
+
+    Examples:
+        $0 --start 1993-01-01 --end 2026-07-01 historical_res-0p25
+        $0 --extend --end 2026-08-01 historical_res-0p25
 EOF
 }
 
@@ -55,7 +62,7 @@ START_DATE=""
 END_DATE=""
 REPLACE=false
 RESUME=false
-BLOCKS=1
+EXTEND=false
 ATTEMPTS=3
 RETRY_DELAY=60
 IMAGE="oras://ghcr.io/stefanocampanella/arco-make:latest"
@@ -80,9 +87,8 @@ while [[ $# -gt 0 ]]; do
         --end) END_DATE="$2"; shift 2 ;;
         --end=*) END_DATE="${1#*=}"; shift ;;
         --replace) REPLACE=true; shift ;;
+        --extend) EXTEND=true; shift ;;
         --resume) RESUME=true; shift ;;
-        --blocks) BLOCKS="$2"; shift 2 ;;
-        --blocks=*) BLOCKS="${1#*=}"; shift ;;
         --attempts) ATTEMPTS="$2"; shift 2 ;;
         --attempts=*) ATTEMPTS="${1#*=}"; shift ;;
         --retry-delay) RETRY_DELAY="$2"; shift 2 ;;
@@ -110,16 +116,30 @@ if [[ -z "${RECIPE}" || ${#POSITIONAL_ARGS[@]} -gt 1 ]]; then
     usage >&2
     exit 1
 fi
+if [[ -z "${END_DATE}" ]]; then
+    echo "Error: give --end (the recipes have no dates)." >&2
+    exit 1
+fi
+if [[ "${EXTEND}" == true && ( -n "${START_DATE}" || "${REPLACE}" == true ) ]]; then
+    echo "Error: --extend starts the day after the output's last: not with --start nor --replace." >&2
+    exit 1
+fi
+if [[ "${EXTEND}" == false && -z "${START_DATE}" ]]; then
+    echo "Error: give --start (the recipes have no dates), or --extend an existing output." >&2
+    exit 1
+fi
 if [[ "${REPLACE}" == true && "${RESUME}" == true ]]; then
     echo "Error: --replace starts over, --resume continues: give one of them." >&2
     exit 1
 fi
-for value in "${BLOCKS}" "${ATTEMPTS}"; do
-    if ! [[ "${value}" =~ ^[1-9][0-9]*$ ]]; then
-        echo "Error: --blocks and --attempts take a positive integer (got '${value}')." >&2
-        exit 1
-    fi
-done
+if ! [[ "${ATTEMPTS}" =~ ^[1-9][0-9]*$ ]]; then
+    echo "Error: --attempts takes a positive integer (got '${ATTEMPTS}')." >&2
+    exit 1
+fi
+if ! [[ "${RETRY_DELAY}" =~ ^[0-9]+$ ]]; then
+    echo "Error: --retry-delay takes a number of seconds (got '${RETRY_DELAY}')." >&2
+    exit 1
+fi
 
 PROJECT_ROOT="${PROJECT_ROOT:-$(pwd)}"
 cd "${PROJECT_ROOT}" || exit 1
@@ -176,19 +196,23 @@ else
     RUN_CMD=(apptainer run "${APPTAINER_FLAGS[@]+"${APPTAINER_FLAGS[@]}"}" "${IMAGE}")
 fi
 
-FLAGS=(--no-progress --log-level="${LOG_LEVEL}" --blocks="${BLOCKS}")
+FLAGS=(--no-progress --log-level="${LOG_LEVEL}")
 [[ -n "${START_DATE}" ]] && FLAGS+=(--start="${START_DATE}")
 [[ -n "${END_DATE}" ]] && FLAGS+=(--end="${END_DATE}")
 
 echo "Download of ${NAME} to ${OUTPUT}, log: ${LOG_FILE} (started $(date -u), PID $$, host $(hostname))"
 for (( attempt=1; attempt<=ATTEMPTS; attempt++ )); do
     MODE=()
+    if [[ "${EXTEND}" == true ]]; then
+        MODE+=(--extend)
+    fi
     if [[ ${attempt} -gt 1 || "${RESUME}" == true ]]; then
-        MODE=(--resume)
+        MODE+=(--resume)
     elif [[ "${REPLACE}" == true ]]; then
-        MODE=(--replace)
+        MODE+=(--replace)
     fi
     echo "Run ${attempt}/${ATTEMPTS} ${MODE[*]+"${MODE[*]}"}"
+    RUN_START=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
     {
         echo "==== run ${attempt}/${ATTEMPTS} ${MODE[*]+"${MODE[*]}"} ($(date -u)) ===="
         "${RUN_CMD[@]}" download "${FLAGS[@]}" "${MODE[@]+"${MODE[@]}"}" -- "${CONFIG_PATH}" "${OUTPUT}"
@@ -199,9 +223,14 @@ for (( attempt=1; attempt<=ATTEMPTS; attempt++ )); do
         exit 0
     fi
     echo "Run ${attempt} failed (exit code ${STATUS}): see ${LOG_FILE}."
+    # A failed check of the recipe's [checks] fails again on the same data: no further attempt.
+    if tail -n "+$((RUN_START + 1))" "${LOG_FILE}" | grep -q "A check of \[checks\] failed"; then
+        echo "A check of the recipe failed (see the log): fix the cause, then rerun this command with --resume." >&2
+        exit 1
+    fi
     if [[ ${attempt} -lt ${ATTEMPTS} ]]; then
         sleep "${RETRY_DELAY}"
     fi
 done
-echo "Download of ${NAME} failed after ${ATTEMPTS} runs: rerun with --resume to continue." >&2
+echo "Download of ${NAME} failed after ${ATTEMPTS} runs (see ${LOG_FILE}): rerun this command with --resume to continue, if the log shows a run waiting." >&2
 exit 1
