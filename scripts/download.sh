@@ -52,12 +52,6 @@ DESCRIPTION
         --log-level LEVEL       debug, info, warning, error or critical (default: info).
         -h, --help              Show this help.
 
-    Environment:
-        DASK_ARRAY__CHUNK_SIZE  The size arco-make's planned chunks aim at, at most (default here:
-                                256MiB, the fastest on the project machine; Dask's own is 128MiB).
-                                Set it in the environment or the environment file: arco-make's
-                                settings file (~/.arcomakerc) yields to the environment.
-
     Examples:
         $0 --start 1993-01-01 --end 2026-07-01 historical_res-0p25
         $0 --extend --end 2026-08-01 historical_res-0p25
@@ -162,9 +156,6 @@ if [[ -n "${ENV_FILE}" ]]; then
     # shellcheck source=/dev/null
     source "${ENV_FILE}"
 fi
-# Chunks of up to 256 MiB, the fastest on the project machine (arco-make logbook, 18 Nov; Dask's
-# default is 128 MiB). Exported, so arco-make sees it through Apptainer too.
-export DASK_ARRAY__CHUNK_SIZE="${DASK_ARRAY__CHUNK_SIZE:-256MiB}"
 
 # Resolve the recipe.
 CONFIG_DIR="${CONFIG_DIR:-${PROJECT_ROOT}/configs/download}"
