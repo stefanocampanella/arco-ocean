@@ -2,7 +2,14 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17751608.svg)](https://doi.org/10.5281/zenodo.17751608)
 
-[//]: # (TODO: Put a cover figure)
+<p align="center">
+  <img src="assets/arco-ocean.webp" width="480" alt="A globe turning through 2023: sea surface temperature and sea ice from ARCO-OCEAN">
+</p>
+
+*Sea surface temperature (`thetao`, top level) and sea ice (`siconc`, white) of 2023 at 0.25°, a
+frame a day, made by `scripts/animation.py` ([design](docs/animation-design.md)). Generated
+using E.U. Copernicus Marine Service Information
+([10.48670/moi-00021](https://doi.org/10.48670/moi-00021)).*
 
 ## Summary
 
@@ -325,7 +332,7 @@ The datasets (historical, statistics and forecasts) are released under the Creat
 
 Under its licence, the rights in the modifications of the GloFAS data belong to their creators: the river discharge is released under CC BY 4.0 as the rest. The GloFAS forecasts are given for information only: they are not flood warnings. The Copernicus Marine Service licence (clause 2.6) asks that its record-keeping requirement be passed on: users of the ocean and sea-ice variables are asked to keep records of their use of the data, enough to document and trace it, and to make them available to the Copernicus Marine Service on reasonable notice.
 
-The code of this repository (scripts, recipes, documentation) is released under the MIT licence ([LICENSE](LICENSE)); the ONI tutorial, adapted from [Climatematch](https://comptools.climatematch.io/)'s, under its licences, CC BY 4.0 for the text and the BSD 3-Clause License for the code.
+The code of this repository (scripts, recipes, documentation) is released under the MIT licence ([LICENSE](LICENSE)); the ONI tutorial, adapted from [Climatematch](https://comptools.climatematch.io/)'s, under its licences, CC BY 4.0 for the text and the BSD 3-Clause License for the code. The animation and the icon in `assets/` show the dataset's values: they are released under CC BY 4.0, as the data, with the credit given under the animation above.
 
 ## Use of AI tools
 

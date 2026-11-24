@@ -63,6 +63,22 @@ header img {
   flex: none;
 }
 
+figure.cover {
+  margin: 1.5rem 0 0;
+  text-align: center;
+}
+
+figure.cover img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+}
+
+figure.cover figcaption {
+  font-size: 0.85rem;
+  color: var(--ink-2);
+}
+
 h1 {
   margin: 0;
   font-size: 2rem;

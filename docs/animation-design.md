@@ -3,10 +3,11 @@
 Roadmap item 5: an animation for the Earthmover marketplace listing and the documentation. This
 was a proposal; the maintainer chose its content and text on 23 Nov (Decisions, below).
 
-![Prototype frame](animation-prototype-frame.png)
+<img src="../assets/arco-ocean.webp" width="480" alt="A globe turning through 2023: sea surface temperature and sea ice from ARCO-OCEAN">
 
-*Prototype frame, from the 1° output of the end-to-end check of 23 Nov (one historical day,
-2026-06-01; the final animation would use 0.25°), drawn by [animation_frame.py](animation_frame.py).*
+*The animation, made on 24 Nov by [scripts/animation.py](../scripts/animation.py) (How it is
+made, below). Generated using E.U. Copernicus Marine Service Information
+([10.48670/moi-00021](https://doi.org/10.48670/moi-00021)).*
 
 ## What it shows
 
@@ -31,8 +32,8 @@ It is within the historical dataset and well known; any year works.
 - **A globe, not a map.** A rotating globe avoids the distortion of flat maps at the poles,
   where the ice is, and shows ocean and ice together as one system, which is what the dataset
   merges.
-- **A loop for the marketplace.** 12 s at 30 frames per second is 360 frames, one per day, and
-  one turn of the globe. It loops without a jump in rotation, though one in season.
+- **A loop for the marketplace.** A frame a day, 365 frames at 30 per second (12 s), and one
+  turn of the globe. It loops without a jump in rotation, though one in season.
 
 ## Alternatives considered
 
@@ -46,28 +47,34 @@ It is within the historical dataset and well known; any year works.
 3. **Depth.** A slice through the levels (temperature along the equator, 0-500 m) next to the
    globe: it shows that the dataset is 3D, but two panels are less suited to a thumbnail.
 
-## How it would be made
+## How it is made
 
-- **Data.** Level 0 of `thetao` and `siconc` for 365 days at 0.25°, read anonymously from the
-  published `historical/res=0p25` repository. A day's level is one stored chunk of 4 MB, so
-  about 1.5 GB in all.
-- **Frames.** matplotlib with cartopy's orthographic projection, which the prototype uses. The
-  central longitude moves by 1° per frame, at a fixed latitude of about 12° (the equator's
-  ocean in view, the Arctic at the rim). Frames are 1080 x 1080 pixels.
-- **Video.** ffmpeg: H.264 MP4 for the marketplace, WebM for the documentation site, and a short
-  GIF or WebP preview. Both repositories credit the sources (the `attribution` attribute) under
-  the video.
-- **Script.** `scripts/animation.py` in this repository: reproducible from the published data,
-  with the year and the variable as options. The data are read once and the frames rendered in
-  parallel processes.
-- **Effort.** About a day for the script and a first video, once the 0.25° historical repository
-  is published. The frames take minutes on the project VM.
+`uv run --script scripts/animation.py [--zarr] SOURCE OUTDIR` (dependencies inline; the options
+in its help). Made on 24 Nov 2026:
+- **Data.** Level 0 of `thetao` and `siconc` for the 365 days of 2023 at 0.25°, read anonymously
+  once (about 3 GB) and cached in OUTDIR per source. Made from the dataset published before
+  (`s3://ogs-arco-ocean/datasets/res=0p25`, `--zarr`), since the new historical repository is not
+  written yet: its sea ice was averaged with open water as 0 along coasts, which the new recipes
+  fix. Run the script again on `historical/res=0p25` once it is published.
+- **Frames.** One image per day (temperature in `thermal`, ice blended in white, land dark),
+  warped by cartopy onto an orthographic globe centred at 12° N (the equator's ocean in view,
+  the Arctic at the rim), with Natural Earth's 50 m coastlines; 1080 x 1080 pixels. The centre
+  moves west by 360/365° a frame, so the surface moves east as the Earth's does. 365 frames take
+  about a minute on the project machine, in parallel processes.
+- **Outputs.**
+  - `assets/arco-ocean.webp` (480 x 480, 4.9 MB): the README's cover, and the web page's,
+    loaded when scrolled to (the still globe for readers who ask for less motion).
+  - `assets/arco-ocean.png`: the first frame's globe, the web page's icon.
+  - An MP4 (H.264) and a WebM (VP9), 1080 x 1080, about 5 MB each, for the marketplace: not
+    committed.
+  - Each credits the Copernicus Marine Service where it is shown; the images are CC BY 4.0, as
+    the data.
 
 ## Decisions (maintainer, 23 Nov)
 
 1. **Variable and year:** sea surface temperature with sea ice, in 2023, as proposed.
 2. **Text:** the title and a running date, small, near the centre of the bottom edge, so that a
-   thumbnail cropped to the centre keeps them; no colour bar, as in the prototype frame.
+   thumbnail cropped to the centre keeps them; no colour bar.
 
 ## Open points
 
