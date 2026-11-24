@@ -171,8 +171,12 @@ then every day, adding the runs after the last stored one (a missed day is caugh
 # The first time: every run from the end of the historical dataset to today's.
 scripts/forecast.sh --start 2026-07-01
 # Then every day at 12:00 UTC, from systemd (below), with the heartbeat for the web page:
-scripts/install_units.sh -- --env-file FILE     # and --image FILE or --virtual-env DIR
+scripts/install_units.sh -- --image FILE        # or --virtual-env DIR
 ```
+
+Settings and credentials come from arco-make's settings file, `~/.arcomakerc`, which the
+heartbeat reads too. The scripts also source `scripts/.env` (`--env-file` for another), which
+sets only where data go (`DATA_ROOT`).
 
 The daily collection runs as systemd user units, versioned in `systemd/`:
 `arco-ocean-forecast.timer` starts `arco-ocean-forecast.service`, which runs
