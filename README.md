@@ -145,10 +145,9 @@ A block that fails with a transient error (a timeout, a dropped connection, a se
 redone, as the recipe's `[retries]` say: a historical block waits out an hour of outage of a
 source, a forecast run a quarter of an hour. A run that fails anyway is resumed by
 `scripts/download.sh` (`--attempts`); for the forecasts, 6 times, 30 minutes apart, for each
-resolution. The downloads' Dask chunks are of up to 256 MiB, the fastest on the project machine:
-`scripts/download.sh` sets `DASK_ARRAY__CHUNK_SIZE` unless the environment or the environment
-file gives it (a value in arco-make's settings file yields to it). The statistics keep Dask's
-128 MiB.
+resolution. arco-make plans chunks of up to Dask's `array.chunk-size`: on the project machine,
+`DASK_ARRAY__CHUNK_SIZE=256MiB` in arco-make's settings file (`~/.arcomakerc`), the fastest
+there (Dask's default is 128 MiB).
 
 Each commit of a repository records how it was made, in its metadata: the version and commit of
 arco-make, the versions of the packages that decide the values, and the recipe's fingerprint.
