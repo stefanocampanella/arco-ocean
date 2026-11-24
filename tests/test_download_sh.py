@@ -60,3 +60,40 @@ def test_a_run_refused_for_a_failed_one_resumes_it_at_once(project: pathlib.Path
   assert "--extend" in first and "--resume" not in first
   assert "--extend" in second and "--resume" in second
   assert "an earlier run failed and waits: resuming it" in result.stdout
+
+
+# Records Dask's chunk size as arco-make gets it.
+CHUNK_SIZE_ARCO_MAKE = """#!/usr/bin/env bash
+echo "${DASK_ARRAY__CHUNK_SIZE:-unset}" >> "${CALLS}"
+"""
+
+
+@pytest.mark.parametrize(
+  ("environment", "env_file", "expected"),
+  [
+    ({}, "", "256MiB"),
+    ({"DASK_ARRAY__CHUNK_SIZE": "64MiB"}, "", "64MiB"),
+    ({}, "DASK_ARRAY__CHUNK_SIZE=512MiB\n", "512MiB"),
+  ],
+  ids=["default", "environment", "environment file, not exported"],
+)
+def test_dask_chunks_of_256_mib_unless_given(
+  project: pathlib.Path, environment: dict[str, str], env_file: str, expected: str
+):
+  (project / "venv" / "bin" / "arco-make").write_text(CHUNK_SIZE_ARCO_MAKE)
+  (project / "env").write_text(env_file)
+  calls = project / "calls"
+  base = {k: v for k, v in os.environ.items() if k != "DASK_ARRAY__CHUNK_SIZE"}
+  result = subprocess.run(
+    [
+      "bash", str(project / "scripts" / "download.sh"), "--project-dir", str(project),
+      "--virtual-env", str(project / "venv"), "--env-file", str(project / "env"),
+      "--start", "2026-11-01", "--end", "2026-11-02", "forecast_res-1p0",
+    ],
+    env={**base, **environment, "CALLS": str(calls), "DATA_ROOT": str(project)},
+    capture_output=True,
+    text=True,
+    timeout=120,
+  )  # fmt: skip
+  assert result.returncode == 0, result.stdout + result.stderr
+  assert calls.read_text().splitlines() == [expected]
