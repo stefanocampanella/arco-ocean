@@ -24,7 +24,7 @@ SYNOPSIS
 
 DESCRIPTION
     Options:
-        --repo OWNER/REPO    The repository (default: inogs/arco-ocean).
+        --repo OWNER/REPO    The repository (default: stefanocampanella/arco-ocean).
         --workflow FILE      The workflow (default: forecast-watchdog.yml).
         --token-file FILE    The token (default: \${XDG_CONFIG_HOME:-~/.config}/arco-ocean/github-token);
                              it must not be readable by group or others.
@@ -32,7 +32,7 @@ DESCRIPTION
 EOF
 }
 
-REPO="inogs/arco-ocean"
+REPO="stefanocampanella/arco-ocean"
 WORKFLOW="forecast-watchdog.yml"
 TOKEN_FILE="${XDG_CONFIG_HOME:-${HOME}/.config}/arco-ocean/github-token"
 

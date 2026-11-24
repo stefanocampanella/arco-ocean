@@ -8,7 +8,7 @@
 
 [Unit]
 Description=ARCO-OCEAN: keep the forecast watchdog's schedule enabled
-Documentation=https://github.com/inogs/arco-ocean#forecasts
+Documentation=https://github.com/stefanocampanella/arco-ocean#forecasts
 
 [Service]
 Type=oneshot

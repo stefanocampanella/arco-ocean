@@ -9,7 +9,7 @@
 
 [Unit]
 Description=ARCO-OCEAN daily forecast collection
-Documentation=https://github.com/inogs/arco-ocean#forecasts
+Documentation=https://github.com/stefanocampanella/arco-ocean#forecasts
 
 [Service]
 Type=oneshot

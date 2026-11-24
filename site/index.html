@@ -26,7 +26,7 @@ SPDX-License-Identifier: MIT
         <a href="#documentation">Documentation</a>
         <a href="#licence">Licence</a>
         <a href="#citation">Citation</a>
-        <a href="https://github.com/inogs/arco-ocean">GitHub</a>
+        <a href="https://github.com/stefanocampanella/arco-ocean">GitHub</a>
       </nav>
     </div>
   </header>
@@ -97,22 +97,22 @@ storage = icechunk.s3_storage(
 )
 repo = icechunk.Repository.open(storage)
 dataset = xr.open_zarr(repo.readonly_session("main").store, consolidated=False)</code></pre>
-      <p>The statistics open one group at a time (<code>group="climatology"</code> or <code>group="anomaly_std"</code>). The <a href="https://github.com/inogs/arco-ocean/blob/main/tutorials/oni.py">ONI tutorial</a>, a <a href="https://marimo.io/">marimo</a> notebook, computes the Oceanic Niño Index from the dataset (<code>uvx marimo edit --sandbox tutorials/oni.py</code>).</p>
+      <p>The statistics open one group at a time (<code>group="climatology"</code> or <code>group="anomaly_std"</code>). The <a href="https://github.com/stefanocampanella/arco-ocean/blob/main/tutorials/oni.py">ONI tutorial</a>, a <a href="https://marimo.io/">marimo</a> notebook, computes the Oceanic Niño Index from the dataset (<code>uvx marimo edit --sandbox tutorials/oni.py</code>).</p>
     </section>
 
     <section id="documentation" aria-labelledby="documentation-title">
       <h2 id="documentation-title">Documentation</h2>
       <ul>
-        <li><a href="https://github.com/inogs/arco-ocean#readme">The dataset's description</a>: every variable, its source and how it is made, the forecasts, the checks.</li>
-        <li><a href="https://github.com/inogs/arco-ocean/blob/main/docs/sources.md">The sources</a>: their versions, the limitations their producers document, and how they fit together.</li>
-        <li><a href="https://github.com/inogs/arco-ocean/blob/main/docs/coarsen-ocean-datasets.md">Coarsening ocean datasets</a>: the sea fraction, the fills, the sea ice and the river outlets.</li>
+        <li><a href="https://github.com/stefanocampanella/arco-ocean#readme">The dataset's description</a>: every variable, its source and how it is made, the forecasts, the checks.</li>
+        <li><a href="https://github.com/stefanocampanella/arco-ocean/blob/main/docs/sources.md">The sources</a>: their versions, the limitations their producers document, and how they fit together.</li>
+        <li><a href="https://github.com/stefanocampanella/arco-ocean/blob/main/docs/coarsen-ocean-datasets.md">Coarsening ocean datasets</a>: the sea fraction, the fills, the sea ice and the river outlets.</li>
         <li><a href="https://github.com/stefanocampanella/arco-make">arco-make</a>, the program that builds ARCO-OCEAN from its recipes (<code>configs/</code>).</li>
       </ul>
     </section>
 
     <section id="licence" aria-labelledby="licence-title">
       <h2 id="licence-title">Licence and credits</h2>
-      <p>The datasets are released under the <a href="https://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0</a> licence. Each repository's <code>attribution</code> attribute credits its sources in the forms their licences prescribe, and must accompany any redistribution: Generated using E.U. Copernicus Marine Service Information (<a href="https://doi.org/10.48670/moi-00021">GLORYS12</a>, <a href="https://doi.org/10.48670/moi-00016">GLO12</a>); contains modified Copernicus Climate Change Service information (<a href="https://doi.org/10.24381/cds.adbb2d47">ERA5</a>) and modified Copernicus Emergency Management Service information (<a href="https://doi.org/10.24381/cds.a4fdd6b9">GloFAS</a>); based on data and products of the European Centre for Medium-Range Weather Forecasts (ECMWF). The GloFAS forecasts are for information only: they are not flood warnings. The Copernicus Marine Service licence asks the users of the ocean and sea-ice variables to keep records of their use of the data and to make them available to the Service on reasonable notice. The code is released under the MIT licence. Details in the <a href="https://github.com/inogs/arco-ocean#license">README</a>.</p>
+      <p>The datasets are released under the <a href="https://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0</a> licence. Each repository's <code>attribution</code> attribute credits its sources in the forms their licences prescribe, and must accompany any redistribution: Generated using E.U. Copernicus Marine Service Information (<a href="https://doi.org/10.48670/moi-00021">GLORYS12</a>, <a href="https://doi.org/10.48670/moi-00016">GLO12</a>); contains modified Copernicus Climate Change Service information (<a href="https://doi.org/10.24381/cds.adbb2d47">ERA5</a>) and modified Copernicus Emergency Management Service information (<a href="https://doi.org/10.24381/cds.a4fdd6b9">GloFAS</a>); based on data and products of the European Centre for Medium-Range Weather Forecasts (ECMWF). The GloFAS forecasts are for information only: they are not flood warnings. The Copernicus Marine Service licence asks the users of the ocean and sea-ice variables to keep records of their use of the data and to make them available to the Service on reasonable notice. The code is released under the MIT licence. Details in the <a href="https://github.com/stefanocampanella/arco-ocean#license">README</a>.</p>
     </section>
 
     <section id="citation" aria-labelledby="citation-title">
@@ -122,7 +122,7 @@ dataset = xr.open_zarr(repo.readonly_session("main").store, consolidated=False)<
   </main>
 
   <footer>
-    <p>ARCO-OCEAN · <a href="https://github.com/inogs/arco-ocean">github.com/inogs/arco-ocean</a> · Neither the European Commission nor ECMWF nor Mercator Ocean International is responsible for any use that may be made of the Copernicus information or data it contains.</p>
+    <p>ARCO-OCEAN · <a href="https://github.com/stefanocampanella/arco-ocean">github.com/stefanocampanella/arco-ocean</a> · Neither the European Commission nor ECMWF nor Mercator Ocean International is responsible for any use that may be made of the Copernicus information or data it contains.</p>
   </footer>
 </body>
 </html>

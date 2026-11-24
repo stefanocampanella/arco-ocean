@@ -41,7 +41,7 @@ authors:
 identifiers:
   - type: doi
     value: 10.5281/zenodo.17751608
-repository-code: 'https://github.com/inogs/arco-ocean'
+repository-code: 'https://github.com/stefanocampanella/arco-ocean'
 repository-artifact: 'https://registry.opendata.aws/ogs-arco-ocean/'
 abstract: >-
   ARCO-OCEAN is an analysis-ready cloud-optimized dataset

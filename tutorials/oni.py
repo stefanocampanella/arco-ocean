@@ -55,7 +55,7 @@ def _(mo):
 
     *Estimated timing of tutorial:* 20 mins
 
-    In this notebook, you will practice using XArray to examine sea surface temperature (SST) from the [ARCO-OCEAN dataset](https://github.com/inogs/arco-ocean), and explore variations in the climate system that occur during El Niño and La Niña events. You will learn to:
+    In this notebook, you will practice using XArray to examine sea surface temperature (SST) from the [ARCO-OCEAN dataset](https://github.com/stefanocampanella/arco-ocean), and explore variations in the climate system that occur during El Niño and La Niña events. You will learn to:
 
     1. Load sea surface temperature data and its climatology from the ARCO-OCEAN dataset.
     2. Select data using `.sel()`.

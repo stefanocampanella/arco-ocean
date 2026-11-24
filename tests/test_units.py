@@ -225,7 +225,7 @@ def test_keepalive_enables_unless_disabled_by_hand(
   result = run("keep_watchdog_enabled.sh", fake | {"FAKE_STATE": state})
   assert result.returncode == 0, result.stderr
   assert said in result.stdout
-  endpoint = "repos/inogs/arco-ocean/actions/workflows/forecast-watchdog.yml"
+  endpoint = "repos/stefanocampanella/arco-ocean/actions/workflows/forecast-watchdog.yml"
   made = calls(fake)
   assert made[0] == f"gh api {endpoint} --jq .state"
   assert (f"gh api --method PUT {endpoint}/enable" in made) is enabled
