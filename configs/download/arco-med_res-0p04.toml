@@ -5,6 +5,15 @@
 # 32-day blocks, as the historical recipes (arco-make logbook, 18 Nov).
 step = "32D"
 
+# A block failing with a transient error (timeouts, dropped connections, throttling, server
+# errors) is redone, after 2, 4, 8, 16 and 32 minutes: an hour of outage of a source per block
+# (arco-make's default: 15 minutes). scripts/download.sh then resumes the run (--attempts), so
+# a few hours in all; an error that keeps coming back still shows within hours.
+[retries]
+attempts = 6
+wait = "2min"
+max_wait = "1h"
+
 # The target grid of every regrid step, named by them.
 [grids.target]
 south = 30.00

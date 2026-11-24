@@ -19,6 +19,15 @@ window = 1826
 # lacks it: NaN, flagged.
 missing_after = "2D"
 
+# A run failing with a transient error is redone, after 1, 2, 4 and 8 minutes (arco-make's
+# default, given here for the budget). For each resolution in turn, scripts/forecast.sh has
+# scripts/download.sh try again 6 times, 30 minutes apart: four hours per resolution outlast a
+# long outage, and the three stay within the collection unit's 20 hours.
+[retries]
+attempts = 5
+wait = "1min"
+max_wait = "15min"
+
 # The target grid of every regrid step, named by them.
 [grids.target]
 south = -90.0
