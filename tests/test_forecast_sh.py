@@ -38,7 +38,7 @@ pytestmark = pytest.mark.skipif(
 def project(tmp_path: pathlib.Path) -> pathlib.Path:
   scripts = tmp_path / "scripts"
   scripts.mkdir()
-  for name in ("forecast.sh", "forecast_status.py", "settings.sh"):
+  for name in ("forecast.sh", "forecast_status.py", "settings.sh", ".env"):
     shutil.copy(SCRIPTS / name, scripts / name)
   (scripts / "download.sh").write_text(FAKE_DOWNLOAD)
   (scripts / "download.sh").chmod(0o755)

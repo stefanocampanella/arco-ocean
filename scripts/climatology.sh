@@ -104,10 +104,6 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ "${ROOT_GIVEN}" == true && -z "${ROOT_OPTION}" ]]; then
-    echo "Error: --data-root is empty (it would fall back to the local disk)." >&2
-    exit 1
-fi
 if [[ "${ROOT_GIVEN}" == true && ( -n "${INPUT}" || -n "${OUTPUT}" ) ]]; then
     echo "Error: give --input and --output, or --data-root, not both." >&2
     exit 1
@@ -125,19 +121,11 @@ cd "${PROJECT_ROOT}" || exit 1
 
 # Where outputs go (DATA_ROOT): scripts/settings.sh.
 # shellcheck source=/dev/null
-source "${SCRIPT_DIR}/settings.sh"
-read_settings
-if [[ -n "${ENV_FILE}" ]]; then
-    if [[ ! -f "${ENV_FILE}" ]]; then
-        echo "Error: environment file '${ENV_FILE}' not found." >&2
-        exit 1
-    fi
-    # shellcheck source=/dev/null
-    source "${ENV_FILE}"
+if ! source "${SCRIPT_DIR}/settings.sh"; then
+    echo "Error: ${SCRIPT_DIR}/settings.sh is missing: the scripts need it." >&2
+    exit 1
 fi
-if [[ "${ROOT_GIVEN}" == true ]]; then
-    DATA_ROOT="${ROOT_OPTION}"
-fi
+resolve_data_root "${ENV_FILE}" "${ROOT_GIVEN}" "${ROOT_OPTION}" || exit 1
 
 CONFIG_DIR="${CONFIG_DIR:-${PROJECT_ROOT}/configs/climatology}"
 if [[ -f "${RECIPE}" ]]; then
@@ -157,9 +145,14 @@ if [[ -z "${INPUT}" || -z "${OUTPUT}" ]]; then
         echo "Error: cannot derive paths from '${NAME}' (expected <product>_res-<res>): give --input and --output." >&2
         exit 1
     fi
-    DATA="$(data_root "${DATA_ROOT:-}")"
-    INPUT="${INPUT:-${DATA}/${BASH_REMATCH[1]}/res=${BASH_REMATCH[2]}}"
-    OUTPUT="${OUTPUT:-${DATA}/statistics/res=${BASH_REMATCH[2]}}"
+    PRODUCT="${BASH_REMATCH[1]}"
+    RES="${BASH_REMATCH[2]}"
+    if [[ -z "${INPUT}" ]]; then
+        INPUT="$(default_output "${PRODUCT}" "${RES}")" || exit 1
+    fi
+    if [[ -z "${OUTPUT}" ]]; then
+        OUTPUT="$(default_output statistics "${RES}")" || exit 1
+    fi
 fi
 if [[ "${OUTPUT}" != *://* ]]; then
     mkdir -p "$(dirname "${OUTPUT}")"

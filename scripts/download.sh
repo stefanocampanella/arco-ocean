@@ -123,10 +123,6 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ "${ROOT_GIVEN}" == true && -z "${ROOT_OPTION}" ]]; then
-    echo "Error: --data-root is empty (it would fall back to the local disk)." >&2
-    exit 1
-fi
 if [[ -n "${OUTPUT}" && "${ROOT_GIVEN}" == true ]]; then
     echo "Error: give --output or --data-root, not both." >&2
     exit 1
@@ -168,19 +164,11 @@ cd "${PROJECT_ROOT}" || exit 1
 
 # Where outputs go (DATA_ROOT): scripts/settings.sh.
 # shellcheck source=/dev/null
-source "${SCRIPT_DIR}/settings.sh"
-read_settings
-if [[ -n "${ENV_FILE}" ]]; then
-    if [[ ! -f "${ENV_FILE}" ]]; then
-        echo "Error: environment file '${ENV_FILE}' not found." >&2
-        exit 1
-    fi
-    # shellcheck source=/dev/null
-    source "${ENV_FILE}"
+if ! source "${SCRIPT_DIR}/settings.sh"; then
+    echo "Error: ${SCRIPT_DIR}/settings.sh is missing: the scripts need it." >&2
+    exit 1
 fi
-if [[ "${ROOT_GIVEN}" == true ]]; then
-    DATA_ROOT="${ROOT_OPTION}"
-fi
+resolve_data_root "${ENV_FILE}" "${ROOT_GIVEN}" "${ROOT_OPTION}" || exit 1
 
 # Resolve the recipe.
 CONFIG_DIR="${CONFIG_DIR:-${PROJECT_ROOT}/configs/download}"
@@ -201,7 +189,7 @@ if [[ -z "${OUTPUT}" ]]; then
         echo "Error: cannot derive the output from '${NAME}' (expected <product>_res-<res>): give --output." >&2
         exit 1
     fi
-    OUTPUT="$(data_root "${DATA_ROOT:-}")/${BASH_REMATCH[1]}/res=${BASH_REMATCH[2]}"
+    OUTPUT="$(default_output "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}")" || exit 1
 fi
 if [[ "${OUTPUT}" != *://* ]]; then
     mkdir -p "$(dirname "${OUTPUT}")"
