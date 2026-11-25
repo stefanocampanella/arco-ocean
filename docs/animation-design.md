@@ -3,15 +3,16 @@
 Roadmap item 5: an animation for the Earthmover marketplace listing and the documentation. This
 was a proposal; the maintainer chose its content and text on 23 Nov (Decisions, below).
 
-![Prototype frame](animation-prototype-frame.png)
+<img src="../assets/arco-ocean.webp" width="480" alt="A globe turning through 2023: sea surface temperature and sea ice from ARCO-OCEAN">
 
-*Prototype frame, from the 1° output of the end-to-end check of 23 Nov (one historical day,
-2026-06-01; the final animation would use 0.25°), drawn by [animation_frame.py](animation_frame.py).*
+*The animation, made on 25 Nov by [scripts/animation.py](../scripts/animation.py) (How it is
+made, below). Generated using E.U. Copernicus Marine Service Information
+([10.48670/moi-00021](https://doi.org/10.48670/moi-00021)).*
 
 ## What it shows
 
-**A rotating globe with a year of the ocean's surface.** One frame per day; sea surface
-temperature as colour; sea ice drawn over it in white, its opacity the concentration; land
+**A rotating globe with a year of the ocean's surface.** Day by day; sea surface temperature
+as colour; sea ice drawn over it in white, its opacity the concentration; land
 dark. While the year runs, the globe turns once, so each ocean comes into view in its own
 season:
 - the Pacific's equatorial cold tongue;
@@ -31,8 +32,10 @@ It is within the historical dataset and well known; any year works.
 - **A globe, not a map.** A rotating globe avoids the distortion of flat maps at the poles,
   where the ice is, and shows ocean and ice together as one system, which is what the dataset
   merges.
-- **A loop for the marketplace.** 12 s at 30 frames per second is 360 frames, one per day, and
-  one turn of the globe. It loops without a jump in rotation, though one in season.
+- **A loop for the marketplace.** Two frames a day, 730 frames at 30 per second (24 s), and
+  one turn of the globe. It loops without a jump in rotation, though one in season. A frame a
+  day (12 s, the first version) turned the globe by a degree a frame, 8 pixels at its centre:
+  too fast to follow (maintainer, 25 Nov: "a bit jumpy").
 
 ## Alternatives considered
 
@@ -46,28 +49,43 @@ It is within the historical dataset and well known; any year works.
 3. **Depth.** A slice through the levels (temperature along the equator, 0-500 m) next to the
    globe: it shows that the dataset is 3D, but two panels are less suited to a thumbnail.
 
-## How it would be made
+## How it is made
 
-- **Data.** Level 0 of `thetao` and `siconc` for 365 days at 0.25°, read anonymously from the
-  published `historical/res=0p25` repository. A day's level is one stored chunk of 4 MB, so
-  about 1.5 GB in all.
-- **Frames.** matplotlib with cartopy's orthographic projection, which the prototype uses. The
-  central longitude moves by 1° per frame, at a fixed latitude of about 12° (the equator's
-  ocean in view, the Arctic at the rim). Frames are 1080 x 1080 pixels.
-- **Video.** ffmpeg: H.264 MP4 for the marketplace, WebM for the documentation site, and a short
-  GIF or WebP preview. Both repositories credit the sources (the `attribution` attribute) under
-  the video.
-- **Script.** `scripts/animation.py` in this repository: reproducible from the published data,
-  with the year and the variable as options. The data are read once and the frames rendered in
-  parallel processes.
-- **Effort.** About a day for the script and a first video, once the 0.25° historical repository
-  is published. The frames take minutes on the project VM.
+`uv run --script scripts/animation.py [--zarr] SOURCE OUTDIR` (dependencies inline; the options
+in its help). Made on 25 Nov 2026:
+- **Data.** Level 0 of `thetao` and `siconc` for the 365 days of 2023 at 0.25°, read anonymously
+  once (about 3 GB) and cached in OUTDIR per source. Made from the dataset published before
+  (`s3://ogs-arco-ocean/datasets/res=0p25`, `--zarr`), since the new historical repository is not
+  written yet: its sea ice was averaged with open water as 0 along coasts, which the new recipes
+  fix. Run the script again on `historical/res=0p25` once it is published.
+- **Frames.** Two per day, the second halfway to the next day (the two days' values blended;
+  the last day's with the first, closing the loop): temperature in `thermal`, ice blended in
+  white, land dark, on an orthographic globe centred at 12° N (the equator's ocean in view, the
+  Arctic at the rim), with Natural Earth's 50 m coastlines; 1080 x 1080 pixels. The centre moves
+  west by 360/730° a frame, so the surface moves east as the Earth's does.
+- **Projection.** The script projects the globe itself: each pixel's longitude and latitude
+  (cartopy's inverse orthographic projection, once: turning the globe adds to the longitudes),
+  the temperature and ice there interpolated bilinearly between the sea cells' centres (a point
+  among mostly land cells is land), longitudes periodic, 2 x 2 samples per pixel, the globe's
+  axes on whole pixels so the image is drawn one pixel per pixel. The first version let cartopy
+  warp the image by nearest cell: the cells' edges stepped from frame to frame (jumpy), and the
+  antimeridian, where the grid's longitudes wrap, showed as a line. The frames take 5 minutes
+  on the project machine, the whole script 11 (the WebP's encoding is the slowest part).
+- **Outputs.**
+  - `assets/arco-ocean.webp` (480 x 480, 8.3 MB, quality 60: WebP shares little between
+    frames, so its size follows their number): the README's cover, and the web page's,
+    loaded when scrolled to (the still globe for readers who ask for less motion).
+  - `assets/arco-ocean.png`: the first frame's globe, the web page's icon.
+  - An MP4 (H.264) and a WebM (VP9), 1080 x 1080, 7.9 and 5.6 MB, for the marketplace: not
+    committed.
+  - Each credits the Copernicus Marine Service where it is shown; the images are CC BY 4.0, as
+    the data.
 
 ## Decisions (maintainer, 23 Nov)
 
 1. **Variable and year:** sea surface temperature with sea ice, in 2023, as proposed.
 2. **Text:** the title and a running date, small, near the centre of the bottom edge, so that a
-   thumbnail cropped to the centre keeps them; no colour bar, as in the prototype frame.
+   thumbnail cropped to the centre keeps them; no colour bar.
 
 ## Open points
 

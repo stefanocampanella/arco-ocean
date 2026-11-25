@@ -35,6 +35,15 @@ SPDX-License-Identifier: MIT
     <section>
       <p>ARCO-OCEAN gives the ocean state and its forcing on regular latitude-longitude grids at 0.25°, 0.5° and 1°, one value a day, from 1 January 1993 to 30 June 2026: the ocean and sea ice from the GLORYS12 reanalysis (49 levels, to 5275 m), the atmosphere from ERA5, the rivers' discharge into the ocean from GloFAS. Each coarse resolution is made from the sources, so that every cell keeps the water, ice and river input of the source cells under it. Daily forecasts of the same variables, from the operational systems of the same producers, continue it.</p>
       <p>It is built for training machine learning models of the ocean, such as coupled atmosphere-ocean models for subseasonal-to-seasonal forecasts, and is stored as <a href="https://icechunk.io/">Icechunk</a> repositories on AWS S3, readable without credentials.</p>
+      <!-- A year of sea surface temperature and sea ice (scripts/animation.py, 8.3 MB: loaded
+           when scrolled to; the still globe for readers who ask for less motion). -->
+      <figure class="cover">
+        <picture>
+          <source srcset="arco-ocean.png" media="(prefers-reduced-motion: reduce)">
+          <img src="arco-ocean.webp" alt="A globe turning through 2023: sea surface temperature and sea ice from ARCO-OCEAN" width="480" height="480" loading="lazy">
+        </picture>
+        <figcaption>Sea surface temperature and sea ice of 2023 at 0.25°, day by day. Generated using E.U. Copernicus Marine Service Information (<a href="https://doi.org/10.48670/moi-00021">GLORYS12</a>).</figcaption>
+      </figure>
     </section>
 
     <section id="forecast-status" aria-labelledby="forecast-status-title">
