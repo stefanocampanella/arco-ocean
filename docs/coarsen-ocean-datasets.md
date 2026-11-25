@@ -337,7 +337,8 @@ neighbour, 5 marks a pit, where the flow ends) give the mouths: the pits. ARCO-O
 per day like a daily precipitation total:
 
 1. the LDD joins the discharge as a static part of the GloFAS dataset (`rename`,
-   `coordinate_tolerance`: its coordinates differ from the discharge's by 4e-12);
+   `coordinate_tolerance`: its coordinates differ from the discharge's by 4e-12), in the bucket's
+   copy of GloFAS (`configs/download/glofas_res-0p05.toml`), which the historical recipes read;
 2. `keep_where` keeps the discharge at the pits, 0 elsewhere;
 3. `per_unit_area` divides by each native cell's area (times 86400: metres per day);
 4. `regrid`, conservative, `skipna = false`, with `conservation_tolerance`: a pit straddling

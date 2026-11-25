@@ -186,6 +186,26 @@ The scripts run arco-make from the image of the version the checks pin (`pyproje
 `oras://ghcr.io/stefanocampanella/arco-make:v0.2.0`, which stays as published; `--image` names
 another, `--virtual-env` a Python environment instead.
 
+### The GloFAS copy
+
+The historical recipes read GloFAS from a copy in the bucket (`glofas/res=0p05`, recipe
+`configs/download/glofas_res-0p05.toml`), not from the EWDS: the discharge and the drainage
+directions on GloFAS's 0.05° grid, the values the EWDS gives, stored losslessly. The EWDS runs a
+user's requests one at a time and has queued some for hours (25 Nov 2026); read directly, every
+32-day block of every resolution waited for its own request. The copy takes one request per
+calendar year, a block and a commit each, and is only ever appended to: make it, or extend it,
+before the historical downloads that need its days.
+
+```bash
+scripts/download.sh --bind /data --start 1993-01-01 --end 1994-01-01 glofas_res-0p05
+for year in $(seq 1995 2026); do
+  scripts/download.sh --bind /data --extend --end "${year}-01-01" glofas_res-0p05 || break
+done
+scripts/download.sh --bind /data --extend --end 2026-07-01 glofas_res-0p05
+```
+
+On the EWDS, the data of 1993 to mid-2026 take about 70 GB as GRIB (5–6 MB a day).
+
 ### Forecasts
 
 The forecast repositories (`forecast/res=<res>`, recipes `configs/download/forecast_res-<res>.toml`)

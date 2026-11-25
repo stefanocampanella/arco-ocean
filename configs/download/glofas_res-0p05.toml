@@ -1,0 +1,58 @@
+# SPDX-FileCopyrightText: 2026 Stefano Campanella
+# SPDX-License-Identifier: MIT
+# A copy of the GloFAS v5.0 historical discharge (and of the v4.0 drainage directions), on
+# GloFAS's own 0.05 deg grid, as the EWDS gives it: the historical recipes read it instead of
+# the EWDS. The EWDS runs a user's requests one at a time and queued some for hours (25 Nov
+# 2026): each 32-day block of each resolution waited for its own request, while this copy takes
+# one request per year. Values are those the EWDS backend returns, stored losslessly, so the
+# historical outputs do not change. The data in the bucket are only ever appended to: the
+# historical recipes read the tip of `main`.
+time_dim = "time"
+# Dates come from the command, a calendar year each (README): the EWDS backend makes one request
+# per year of a block, and a block is a commit.
+step = "366D"
+
+# As the historical recipes: an hour of outage per block, then the script's attempts.
+[retries]
+attempts = 6
+wait = "2min"
+max_wait = "1h"
+
+[[datasets.glofas.parts]]
+filename_or_obj = "ewds://cems-glofas-historical"
+engine = "earlywarningdatastore"
+system_version = "version_5_0"
+hydrological_model = "lisflood"
+product_type = "consolidated"
+timespan = "time_mean"
+variable = "average_river_discharge_in_the_last_24_hours"
+
+# GloFAS v5.0 publishes no drainage directions: v4.0's are on the same cells. Stored with the
+# discharge's coordinates, so readers need no tolerance.
+[[datasets.glofas.parts]]
+filename_or_obj = "https://confluence.ecmwf.int/download/attachments/242067380/ldd_glofas_v4_0.nc"
+engine = "netcdfoverhttp"
+drop_variables = ["crs"]
+rename = {lat = "latitude", lon = "longitude"}
+# The file's coordinates differ from the discharge's by about 4e-12.
+coordinate_tolerance = 1e-9
+
+[[postprocess]]
+name = "assign_attrs"
+title = "GloFAS v5.0 historical river discharge, a copy for ARCO-OCEAN"
+summary = "The GloFAS v5.0 consolidated reanalysis (mean discharge of the last 24 h, LISFLOOD) as the Early Warning Data Store gives it, and GloFAS v4.0's local drain directions, on GloFAS's 0.05 deg grid. Read by the ARCO-OCEAN historical recipes instead of the EWDS."
+source = "GloFAS v5.0 historical (cems-glofas-historical, EWDS); ldd_glofas_v4_0.nc (GloFAS v4.0 auxiliary data)"
+license = "CEMS-FLOODS datasets licence"
+attribution = "Contains Copernicus Emergency Management Service information 2026 (GloFAS v5.0, https://doi.org/10.24381/cds.a4fdd6b9). Neither the European Commission nor ECMWF is responsible for any use that may be made of the Copernicus information or data it contains."
+references = "https://github.com/stefanocampanella/arco-ocean"
+
+# Every day of each block (the EWDS backend also fails a block missing days, naming them).
+[checks.valid_time_coordinate]
+freq = "1D"
+
+[save]
+# One day of the whole grid per chunk (86 MB uncompressed): the historical recipes read whole
+# days, as their regridding needs. No shards: blocks of a year are not multiples of a shard.
+chunks = {time = 1, latitude = -1, longitude = -1}
+# Lossless: zstd over bit-shuffled values (GRIB-packed values have few significant bits).
+compressors = [{name = "blosc", configuration = {cname = "zstd", clevel = 5, shuffle = "bitshuffle"}}]

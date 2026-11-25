@@ -189,22 +189,11 @@ deep = false
 # direction 5, where rivers end), as metres of water per day over each coarse cell, like a daily
 # precipitation total; regridded conservatively, the total kept (checked). GloFAS v5.0 publishes
 # no drainage directions: v4.0's are on the same cells.
+# Both are read from the bucket's copy (configs/download/glofas_res-0p05.toml: the EWDS's values,
+# one request per year instead of one per block, see README), on GloFAS's grid.
 [[datasets.glofas.parts]]
-filename_or_obj = "ewds://cems-glofas-historical"
-engine = "earlywarningdatastore"
-system_version = "version_5_0"
-hydrological_model = "lisflood"
-product_type = "consolidated"
-timespan = "time_mean"
-variable = "average_river_discharge_in_the_last_24_hours"
-
-[[datasets.glofas.parts]]
-filename_or_obj = "https://confluence.ecmwf.int/download/attachments/242067380/ldd_glofas_v4_0.nc"
-engine = "netcdfoverhttp"
-drop_variables = ["crs"]
-rename = {lat = "latitude", lon = "longitude"}
-# The file's coordinates differ from the discharge's by about 4e-12.
-coordinate_tolerance = 1e-9
+filename_or_obj = "s3://ogs-arco-ocean/glofas/res=0p05"
+engine = "icechunk"
 
 [[datasets.glofas.postprocess]]
 name = "keep_where"
