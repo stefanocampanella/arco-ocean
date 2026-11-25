@@ -4,7 +4,8 @@
 
 `scripts/forecast.sh` calls this script at each step of a collection, and every few minutes while
 it runs. Each call updates a local state file and, with `--publish`, uploads the document (to an
-`s3://` URL, through the AWS profile of arco-make's settings, or to a local path). The page tells
+`s3://` URL, or to a local path). The repositories (local or `s3://`) are read and the document
+uploaded with arco-make's settings (`~/.arcomakerc`: the AWS profile), applied first. The page tells
 from it whether the latest collection is running, finished or aborted, and calls it stale when
 the heartbeat stops or no collection finished for too long: a collection killed without notice
 (the machine down, a signal that cannot be trapped) stops beating.
@@ -27,7 +28,7 @@ first of them in a row), kept until one stores every run; `missing_after_days` i
 older than that, or has waited longer: a source that stopped publishing keeps a resolution
 waiting (its older runs are stored without it, flagged), every day.
 
-Local paths stay in the state file: they are not published.
+The repositories' paths and URLs stay in the state file: they are not published.
 
 Usage (from scripts/forecast.sh; run with the Python of the arco-make that downloads):
   forecast_status.py --state-file F [--publish URL] start --target-run DATE --repo RES=PATH ...
@@ -54,7 +55,7 @@ RES_STATES = ("pending", "downloading", "finished", "not_published", "failed")
 # Dimensions of the forecast recipes (arco-make's defaults).
 INIT_DIM = "init_time"
 LEAD_DIM = "lead_time"
-# Not published: the repositories' local paths.
+# Not published: the repositories' paths and URLs.
 PRIVATE_KEYS = ("repositories",)
 
 
@@ -98,10 +99,7 @@ def publish(url: str, body: str) -> None:
     write_atomically(pathlib.Path(url), body)
     return
   import botocore.session
-  from arcomake import settings
 
-  # The AWS profile and other settings from ~/.arcomakerc, as arco-make itself reads them.
-  settings.apply(settings.read(settings.settings_path()))
   bucket, _, key = url.removeprefix("s3://").partition("/")
   if not bucket or not key:
     raise ValueError(f"not an object URL: {url}")
@@ -238,8 +236,18 @@ def parse(argv: list[str]) -> argparse.Namespace:
   return parser.parse_args(argv)
 
 
+def apply_settings() -> None:
+  """The AWS profile and other settings from ~/.arcomakerc, as arco-make itself reads them: the
+  systemd units run without the shell's environment."""
+  from arcomake import settings
+
+  settings.apply(settings.read(settings.settings_path()))
+
+
 def main(argv: list[str]) -> int:
   args = parse(argv)
+  # Before any read: the repositories may be in the bucket (forecast.sh --output-root).
+  apply_settings()
   with locked(args.state_file):
     document = load(args.state_file)
     if args.command == "start":
