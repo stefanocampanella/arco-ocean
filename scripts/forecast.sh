@@ -77,6 +77,7 @@ IMAGE="oras://ghcr.io/stefanocampanella/arco-make:v0.2.0"
 VENV=""
 ENV_FILE="scripts/.env"
 OUTPUT_ROOT=""
+ROOT_GIVEN=false
 BINDS=()
 PASS=()
 
@@ -113,8 +114,8 @@ while [[ $# -gt 0 ]]; do
         --env-file=*) ENV_FILE="${1#*=}"; PASS+=("$1"); shift ;;
         --bind) BINDS+=("$2"); PASS+=("$1" "$2"); shift 2 ;;
         --bind=*) BINDS+=("${1#*=}"); PASS+=("$1"); shift ;;
-        --output-root) OUTPUT_ROOT="$2"; PASS+=("$1" "$2"); shift 2 ;;
-        --output-root=*) OUTPUT_ROOT="${1#*=}"; PASS+=("$1"); shift ;;
+        --output-root) OUTPUT_ROOT="$2"; ROOT_GIVEN=true; PASS+=("$1" "$2"); shift 2 ;;
+        --output-root=*) OUTPUT_ROOT="${1#*=}"; ROOT_GIVEN=true; PASS+=("$1"); shift ;;
         --config-dir|--log-level)
             PASS+=("$1" "$2"); shift 2 ;;
         --config-dir=*|--log-level=*)
@@ -124,6 +125,10 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if [[ "${ROOT_GIVEN}" == true && -z "${OUTPUT_ROOT}" ]]; then
+    echo "Error: --output-root is empty (it would fall back to the local disk)." >&2
+    exit 1
+fi
 if ! [[ "${HEARTBEAT}" =~ ^[1-9][0-9]*$ ]]; then
     echo "Error: --heartbeat takes a positive number of seconds (got '${HEARTBEAT}')." >&2
     exit 1
@@ -201,7 +206,8 @@ trap 'exit 143' TERM
 if [[ -n "${STATUS_URL}" ]]; then
     REPOS=()
     IFS=',' read -r -a RES_LIST <<< "${RESOLUTIONS}"
-    # scripts/download.sh's default output for the recipe forecast_res-<res>.
+    # scripts/download.sh's default output for the recipe forecast_res-<res>: the same rule as
+    # there (and in climatology.sh); the tests of both scripts pin it to ROOT/forecast/res=<res>.
     ROOT="${OUTPUT_ROOT:-${DATA_ROOT:-${PROJECT_ROOT}}/data}"
     for RES in "${RES_LIST[@]}"; do
         REPOS+=(--repo "${RES}=${ROOT%/}/forecast/res=${RES}")

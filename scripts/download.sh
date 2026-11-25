@@ -65,6 +65,7 @@ PROJECT_ROOT=""
 CONFIG_DIR=""
 OUTPUT=""
 OUTPUT_ROOT=""
+ROOT_GIVEN=false
 LOG_DIR=""
 START_DATE=""
 END_DATE=""
@@ -89,8 +90,8 @@ while [[ $# -gt 0 ]]; do
         --config-dir=*) CONFIG_DIR="${1#*=}"; shift ;;
         --output) OUTPUT="$2"; shift 2 ;;
         --output=*) OUTPUT="${1#*=}"; shift ;;
-        --output-root) OUTPUT_ROOT="$2"; shift 2 ;;
-        --output-root=*) OUTPUT_ROOT="${1#*=}"; shift ;;
+        --output-root) OUTPUT_ROOT="$2"; ROOT_GIVEN=true; shift 2 ;;
+        --output-root=*) OUTPUT_ROOT="${1#*=}"; ROOT_GIVEN=true; shift ;;
         --log-dir) LOG_DIR="$2"; shift 2 ;;
         --log-dir=*) LOG_DIR="${1#*=}"; shift ;;
         --start) START_DATE="$2"; shift 2 ;;
@@ -121,6 +122,10 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if [[ "${ROOT_GIVEN}" == true && -z "${OUTPUT_ROOT}" ]]; then
+    echo "Error: --output-root is empty (it would fall back to the local disk)." >&2
+    exit 1
+fi
 if [[ -n "${OUTPUT}" && -n "${OUTPUT_ROOT}" ]]; then
     echo "Error: give --output or --output-root, not both." >&2
     exit 1

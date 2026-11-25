@@ -96,3 +96,11 @@ def test_output_and_output_root_are_exclusive(project: pathlib.Path):
   result = run_resume(project, "--output", "s3://bucket/x", "--output-root", "s3://bucket")
   assert result.returncode == 1
   assert "not both" in result.stderr
+
+
+def test_an_empty_output_root_is_refused(project: pathlib.Path):
+  # Empty (a variable that expanded to nothing, say), it would fall back to the local disk.
+  result = run_resume(project, "--output-root=")
+  assert result.returncode == 1
+  assert "--output-root is empty" in result.stderr
+  assert not (project / "calls").exists()

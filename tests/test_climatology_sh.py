@@ -30,9 +30,8 @@ def project(tmp_path: pathlib.Path) -> pathlib.Path:
   return tmp_path
 
 
-def paths(project: pathlib.Path, *args: str) -> list[str]:
-  """The input and output climatology.sh gives arco-make."""
-  result = subprocess.run(
+def climatology(project: pathlib.Path, *args: str) -> subprocess.CompletedProcess:
+  return subprocess.run(
     [
       "bash", str(project / "scripts" / "climatology.sh"), "--project-dir", str(project),
       "--virtual-env", str(project / "venv"), "--env-file", "", *args, "historical_res-1p0",
@@ -42,8 +41,29 @@ def paths(project: pathlib.Path, *args: str) -> list[str]:
     text=True,
     timeout=60,
   )  # fmt: skip
+
+
+def paths(project: pathlib.Path, *args: str) -> list[str]:
+  """The input and output climatology.sh gives arco-make."""
+  result = climatology(project, *args)
   assert result.returncode == 0, result.stdout + result.stderr
   return (project / "calls").read_text().split()[-2:]
+
+
+@pytest.mark.parametrize(
+  "args",
+  [
+    ("--output-root=",),
+    ("--output-root", "s3://bucket", "--output", "s3://bucket/x"),
+    ("--output-root", "s3://bucket", "--input", "s3://bucket/x"),
+  ],
+)
+def test_an_output_root_empty_or_with_paths_is_refused(project: pathlib.Path, args):
+  # Either would put the statistics somewhere else than meant, silently.
+  result = climatology(project, *args)
+  assert result.returncode == 1
+  assert "--output-root" in result.stderr
+  assert not (project / "calls").exists()
 
 
 def test_the_default_paths_are_under_the_data_root(project: pathlib.Path):

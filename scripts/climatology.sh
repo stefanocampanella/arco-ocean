@@ -32,7 +32,8 @@ DESCRIPTION
                                 (default: ROOT/statistics/res=<res>).
         --output-root ROOT      Where the downloads' outputs are and the statistics go, as
                                 download.sh's --output-root, e.g. s3://ogs-arco-ocean (default:
-                                \$DATA_ROOT/data, or the project's data/).
+                                \$DATA_ROOT/data, or the project's data/). Not with --input
+                                or --output.
         --log-dir DIR           Where to write the log (default: \${PROJECT_ROOT}/logs/climatology).
         --replace               Write a new version of an existing output (arco-make --replace).
         --graph                 One Dask graph (arco-make --graph) instead of streaming the series
@@ -55,6 +56,7 @@ CONFIG_DIR=""
 INPUT=""
 OUTPUT=""
 OUTPUT_ROOT=""
+ROOT_GIVEN=false
 STREAMING=true
 LOG_DIR=""
 REPLACE=false
@@ -77,8 +79,8 @@ while [[ $# -gt 0 ]]; do
         --input=*) INPUT="${1#*=}"; shift ;;
         --output) OUTPUT="$2"; shift 2 ;;
         --output=*) OUTPUT="${1#*=}"; shift ;;
-        --output-root) OUTPUT_ROOT="$2"; shift 2 ;;
-        --output-root=*) OUTPUT_ROOT="${1#*=}"; shift ;;
+        --output-root) OUTPUT_ROOT="$2"; ROOT_GIVEN=true; shift 2 ;;
+        --output-root=*) OUTPUT_ROOT="${1#*=}"; ROOT_GIVEN=true; shift ;;
         --streaming) STREAMING=true; shift ;;
         --graph) STREAMING=false; shift ;;
         --log-dir) LOG_DIR="$2"; shift 2 ;;
@@ -103,6 +105,14 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if [[ "${ROOT_GIVEN}" == true && -z "${OUTPUT_ROOT}" ]]; then
+    echo "Error: --output-root is empty (it would fall back to the local disk)." >&2
+    exit 1
+fi
+if [[ "${ROOT_GIVEN}" == true && ( -n "${INPUT}" || -n "${OUTPUT}" ) ]]; then
+    echo "Error: give --input and --output, or --output-root, not both." >&2
+    exit 1
+fi
 RECIPE="${POSITIONAL_ARGS[0]:-}"
 if [[ -z "${RECIPE}" || ${#POSITIONAL_ARGS[@]} -gt 1 ]]; then
     echo "Error: give exactly one RECIPE." >&2
