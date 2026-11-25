@@ -141,6 +141,14 @@ scripts/download.sh --start 1993-01-01 --end 2026-07-01 historical_res-0p25
 scripts/download.sh --extend --end 2026-10-01 historical_res-0p25
 ```
 
+A block that fails with a transient error (a timeout, a dropped connection, a server error) is
+redone, as the recipe's `[retries]` say: a historical block waits out an hour of outage of a
+source, a forecast run a quarter of an hour. A run that fails anyway is resumed by
+`scripts/download.sh` (`--attempts`); for the forecasts, 6 times, 30 minutes apart, for each
+resolution. arco-make plans chunks of up to Dask's `array.chunk-size`: on the project machine,
+`DASK_ARRAY__CHUNK_SIZE=256MiB` in arco-make's settings file (`~/.arcomakerc`), the fastest
+there (Dask's default is 128 MiB).
+
 Each commit of a repository records how it was made, in its metadata: the version and commit of
 arco-make, the versions of the packages that decide the values, and the recipe's fingerprint.
 
@@ -163,8 +171,12 @@ then every day, adding the runs after the last stored one (a missed day is caugh
 # The first time: every run from the end of the historical dataset to today's.
 scripts/forecast.sh --start 2026-07-01
 # Then every day at 12:00 UTC, from systemd (below), with the heartbeat for the web page:
-scripts/install_units.sh -- --env-file FILE     # and --image FILE or --virtual-env DIR
+scripts/install_units.sh -- --image FILE        # or --virtual-env DIR
 ```
+
+Settings and credentials come from arco-make's settings file, `~/.arcomakerc`, which the
+heartbeat reads too. The scripts also source `scripts/.env` (`--env-file` for another), which
+sets only where data go (`DATA_ROOT`).
 
 The daily collection runs as systemd user units, versioned in `systemd/`:
 `arco-ocean-forecast.timer` starts `arco-ocean-forecast.service`, which runs
