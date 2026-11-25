@@ -20,7 +20,8 @@ echo "$*" >> "${CALLS}"
 @pytest.fixture
 def project(tmp_path: pathlib.Path) -> pathlib.Path:
   (tmp_path / "scripts").mkdir()
-  shutil.copy(SCRIPTS / "climatology.sh", tmp_path / "scripts" / "climatology.sh")
+  for name in ("climatology.sh", "settings.sh"):
+    shutil.copy(SCRIPTS / name, tmp_path / "scripts" / name)
   (tmp_path / "configs" / "climatology").mkdir(parents=True)
   (tmp_path / "configs" / "climatology" / "historical_res-1p0.toml").write_text("")
   arco_make = tmp_path / "venv" / "bin" / "arco-make"
@@ -53,28 +54,28 @@ def paths(project: pathlib.Path, *args: str) -> list[str]:
 @pytest.mark.parametrize(
   "args",
   [
-    ("--output-root=",),
-    ("--output-root", "s3://bucket", "--output", "s3://bucket/x"),
-    ("--output-root", "s3://bucket", "--input", "s3://bucket/x"),
+    ("--data-root=",),
+    ("--data-root", "s3://bucket", "--output", "s3://bucket/x"),
+    ("--data-root", "s3://bucket", "--input", "s3://bucket/x"),
   ],
 )
-def test_an_output_root_empty_or_with_paths_is_refused(project: pathlib.Path, args):
+def test_a_data_root_empty_or_with_paths_is_refused(project: pathlib.Path, args):
   # Either would put the statistics somewhere else than meant, silently.
   result = climatology(project, *args)
   assert result.returncode == 1
-  assert "--output-root" in result.stderr
+  assert "--data-root" in result.stderr
   assert not (project / "calls").exists()
 
 
 def test_the_default_paths_are_under_the_data_root(project: pathlib.Path):
   assert paths(project) == [
-    f"{project}/root/data/historical/res=1p0",
-    f"{project}/root/data/statistics/res=1p0",
+    f"{project}/root/historical/res=1p0",
+    f"{project}/root/statistics/res=1p0",
   ]
 
 
-def test_an_output_root_holds_the_bucket_layout(project: pathlib.Path):
-  assert paths(project, "--output-root", "s3://bucket/") == [
+def test_a_data_root_holds_the_bucket_layout(project: pathlib.Path):
+  assert paths(project, "--data-root", "s3://bucket/") == [
     "s3://bucket/historical/res=1p0",
     "s3://bucket/statistics/res=1p0",
   ]

@@ -29,7 +29,8 @@ pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="needs Linux (da
 @pytest.fixture
 def project(tmp_path: pathlib.Path) -> pathlib.Path:
   (tmp_path / "scripts").mkdir()
-  shutil.copy(SCRIPTS / "download.sh", tmp_path / "scripts" / "download.sh")
+  for name in ("download.sh", "settings.sh"):
+    shutil.copy(SCRIPTS / name, tmp_path / "scripts" / name)
   (tmp_path / "configs" / "download").mkdir(parents=True)
   (tmp_path / "configs" / "download" / "forecast_res-1p0.toml").write_text("")
   arco_make = tmp_path / "venv" / "bin" / "arco-make"
@@ -80,27 +81,27 @@ def run_resume(project: pathlib.Path, *args: str) -> subprocess.CompletedProcess
 def test_the_default_output_is_under_the_data_root(project: pathlib.Path):
   result = run_resume(project)
   assert result.returncode == 0, result.stdout + result.stderr
-  assert f" {project}/root/data/forecast/res=1p0" in (project / "calls").read_text()
+  assert f" {project}/root/forecast/res=1p0" in (project / "calls").read_text()
 
 
-def test_an_output_root_holds_the_bucket_layout(project: pathlib.Path):
+def test_a_data_root_holds_the_bucket_layout(project: pathlib.Path):
   # The bucket's layout, <product>/res=<res> at its root, without data/ in between: the
   # forecast units could not write there (25 Nov).
-  result = run_resume(project, "--output-root", "s3://bucket/")
+  result = run_resume(project, "--data-root", "s3://bucket/")
   assert result.returncode == 0, result.stdout + result.stderr
   call = (project / "calls").read_text()
   assert call.rstrip().endswith(" s3://bucket/forecast/res=1p0")
 
 
-def test_output_and_output_root_are_exclusive(project: pathlib.Path):
-  result = run_resume(project, "--output", "s3://bucket/x", "--output-root", "s3://bucket")
+def test_output_and_data_root_are_exclusive(project: pathlib.Path):
+  result = run_resume(project, "--output", "s3://bucket/x", "--data-root", "s3://bucket")
   assert result.returncode == 1
   assert "not both" in result.stderr
 
 
-def test_an_empty_output_root_is_refused(project: pathlib.Path):
+def test_an_empty_data_root_is_refused(project: pathlib.Path):
   # Empty (a variable that expanded to nothing, say), it would fall back to the local disk.
-  result = run_resume(project, "--output-root=")
+  result = run_resume(project, "--data-root=")
   assert result.returncode == 1
-  assert "--output-root is empty" in result.stderr
+  assert "--data-root is empty" in result.stderr
   assert not (project / "calls").exists()

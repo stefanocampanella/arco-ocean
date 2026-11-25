@@ -30,7 +30,7 @@ DESCRIPTION
         -h, --help      Show this help.
 
     Run from another checkout, it moves the units there. The options after -- go to every
-    collection (scripts/forecast.sh), e.g. --bind /data --output-root s3://BUCKET, --image FILE
+    collection (scripts/forecast.sh), e.g. --bind /data, --data-root s3://BUCKET, --image FILE
     or --virtual-env DIR, and --env-file FILE; relative paths are from the checkout. They cannot
     hold spaces, quotes, backslashes or dollar signs.
 

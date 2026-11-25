@@ -246,7 +246,7 @@ def apply_settings() -> None:
 
 def main(argv: list[str]) -> int:
   args = parse(argv)
-  # Before any read: the repositories may be in the bucket (forecast.sh --output-root).
+  # Before any read: the repositories may be in the bucket (DATA_ROOT, scripts/settings.sh).
   apply_settings()
   with locked(args.state_file):
     document = load(args.state_file)

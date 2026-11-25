@@ -27,13 +27,12 @@ DESCRIPTION
     Options:
         --project-dir DIR       Project root directory (default: current working directory).
         --config-dir DIR        Where to look for recipes (default: \${PROJECT_ROOT}/configs/climatology).
-        --input PATH            Input dataset (default: ROOT/<product>/res=<res>).
+        --input PATH            Input dataset (default: DATA_ROOT/<product>/res=<res>).
         --output PATH           Statistics output, groups climatology and anomaly_std
-                                (default: ROOT/statistics/res=<res>).
-        --output-root ROOT      Where the downloads' outputs are and the statistics go, as
-                                download.sh's --output-root, e.g. s3://ogs-arco-ocean (default:
-                                \$DATA_ROOT/data, or the project's data/). Not with --input
-                                or --output.
+                                (default: DATA_ROOT/statistics/res=<res>).
+        --data-root ROOT        Where the downloads' outputs are and the statistics go, as
+                                download.sh's --data-root (default: as there,
+                                scripts/settings.sh). Not with --input or --output.
         --log-dir DIR           Where to write the log (default: \${PROJECT_ROOT}/logs/climatology).
         --replace               Write a new version of an existing output (arco-make --replace).
         --graph                 One Dask graph (arco-make --graph) instead of streaming the series
@@ -55,7 +54,7 @@ PROJECT_ROOT=""
 CONFIG_DIR=""
 INPUT=""
 OUTPUT=""
-OUTPUT_ROOT=""
+ROOT_OPTION=""
 ROOT_GIVEN=false
 STREAMING=true
 LOG_DIR=""
@@ -79,8 +78,8 @@ while [[ $# -gt 0 ]]; do
         --input=*) INPUT="${1#*=}"; shift ;;
         --output) OUTPUT="$2"; shift 2 ;;
         --output=*) OUTPUT="${1#*=}"; shift ;;
-        --output-root) OUTPUT_ROOT="$2"; ROOT_GIVEN=true; shift 2 ;;
-        --output-root=*) OUTPUT_ROOT="${1#*=}"; ROOT_GIVEN=true; shift ;;
+        --data-root) ROOT_OPTION="$2"; ROOT_GIVEN=true; shift 2 ;;
+        --data-root=*) ROOT_OPTION="${1#*=}"; ROOT_GIVEN=true; shift ;;
         --streaming) STREAMING=true; shift ;;
         --graph) STREAMING=false; shift ;;
         --log-dir) LOG_DIR="$2"; shift 2 ;;
@@ -105,12 +104,12 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ "${ROOT_GIVEN}" == true && -z "${OUTPUT_ROOT}" ]]; then
-    echo "Error: --output-root is empty (it would fall back to the local disk)." >&2
+if [[ "${ROOT_GIVEN}" == true && -z "${ROOT_OPTION}" ]]; then
+    echo "Error: --data-root is empty (it would fall back to the local disk)." >&2
     exit 1
 fi
 if [[ "${ROOT_GIVEN}" == true && ( -n "${INPUT}" || -n "${OUTPUT}" ) ]]; then
-    echo "Error: give --input and --output, or --output-root, not both." >&2
+    echo "Error: give --input and --output, or --data-root, not both." >&2
     exit 1
 fi
 RECIPE="${POSITIONAL_ARGS[0]:-}"
@@ -120,9 +119,14 @@ if [[ -z "${RECIPE}" || ${#POSITIONAL_ARGS[@]} -gt 1 ]]; then
     exit 1
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="${PROJECT_ROOT:-$(pwd)}"
 cd "${PROJECT_ROOT}" || exit 1
 
+# Where outputs go (DATA_ROOT): scripts/settings.sh.
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/settings.sh"
+read_settings
 if [[ -n "${ENV_FILE}" ]]; then
     if [[ ! -f "${ENV_FILE}" ]]; then
         echo "Error: environment file '${ENV_FILE}' not found." >&2
@@ -130,6 +134,9 @@ if [[ -n "${ENV_FILE}" ]]; then
     fi
     # shellcheck source=/dev/null
     source "${ENV_FILE}"
+fi
+if [[ "${ROOT_GIVEN}" == true ]]; then
+    DATA_ROOT="${ROOT_OPTION}"
 fi
 
 CONFIG_DIR="${CONFIG_DIR:-${PROJECT_ROOT}/configs/climatology}"
@@ -150,8 +157,7 @@ if [[ -z "${INPUT}" || -z "${OUTPUT}" ]]; then
         echo "Error: cannot derive paths from '${NAME}' (expected <product>_res-<res>): give --input and --output." >&2
         exit 1
     fi
-    DATA="${OUTPUT_ROOT:-${DATA_ROOT:-${PROJECT_ROOT}}/data}"
-    DATA="${DATA%/}"
+    DATA="$(data_root "${DATA_ROOT:-}")"
     INPUT="${INPUT:-${DATA}/${BASH_REMATCH[1]}/res=${BASH_REMATCH[2]}}"
     OUTPUT="${OUTPUT:-${DATA}/statistics/res=${BASH_REMATCH[2]}}"
 fi
