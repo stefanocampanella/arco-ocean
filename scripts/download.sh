@@ -45,7 +45,7 @@ DESCRIPTION
         --resume                Continue a run that failed earlier (arco-make --resume).
         --attempts N            Runs in all, the later ones resuming (default: 3).
         --retry-delay SECONDS   Wait between runs (default: 60).
-        --image IMAGE           Apptainer image (default: oras://ghcr.io/stefanocampanella/arco-make:latest).
+        --image IMAGE           Apptainer image (default: oras://ghcr.io/stefanocampanella/arco-make:v0.2.0).
         --virtual-env PATH      Run from a local virtual environment instead of Apptainer.
         --env-file FILE         Environment file to source (default: scripts/.env).
         --bind SRC[:DST[:OPTS]] Path to bind within the Apptainer container (repeatable).
@@ -69,7 +69,8 @@ RESUME=false
 EXTEND=false
 ATTEMPTS=3
 RETRY_DELAY=60
-IMAGE="oras://ghcr.io/stefanocampanella/arco-make:latest"
+# The image of the arco-make version pinned in pyproject.toml (tests/test_image.py).
+IMAGE="oras://ghcr.io/stefanocampanella/arco-make:v0.2.0"
 VENV=""
 ENV_FILE="scripts/.env"
 BINDS=()

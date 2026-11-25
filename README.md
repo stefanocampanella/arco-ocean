@@ -159,6 +159,10 @@ there (Dask's default is 128 MiB).
 Each commit of a repository records how it was made, in its metadata: the version and commit of
 arco-make, the versions of the packages that decide the values, and the recipe's fingerprint.
 
+The scripts run arco-make from the image of the version the checks pin (`pyproject.toml`), now
+`oras://ghcr.io/stefanocampanella/arco-make:v0.2.0`, which stays as published; `--image` names
+another, `--virtual-env` a Python environment instead.
+
 ### Forecasts
 
 The forecast repositories (`forecast/res=<res>`, recipes `configs/download/forecast_res-<res>.toml`)

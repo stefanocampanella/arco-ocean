@@ -276,14 +276,14 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 notes = [
-    { name = "arcomake", extras = ["live"], git = "https://github.com/stefanocampanella/arco-make.git?rev=441874f6db7e610f2ca5d45568620310c12e7373" },
+    { name = "arcomake", extras = ["live"], git = "https://github.com/stefanocampanella/arco-make.git?rev=v0.2.0" },
     { name = "pytest" },
 ]
 
 [[package]]
 name = "arcomake"
 version = "0.2.0"
-source = { git = "https://github.com/stefanocampanella/arco-make.git?rev=441874f6db7e610f2ca5d45568620310c12e7373#441874f6db7e610f2ca5d45568620310c12e7373" }
+source = { git = "https://github.com/stefanocampanella/arco-make.git?rev=v0.2.0#06911aeeee7440e8495050c5371f0542a451752b" }
 dependencies = [
     { name = "aiohttp" },
     { name = "botocore", extra = ["crt"] },
