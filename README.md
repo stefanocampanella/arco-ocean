@@ -6,8 +6,8 @@
   <img src="assets/arco-ocean.webp" width="480" alt="A globe turning through 2023: sea surface temperature and sea ice from ARCO-OCEAN">
 </p>
 
-*Sea surface temperature (`thetao`, top level) and sea ice (`siconc`, white) of 2023 at 0.25°, a
-frame a day, made by `scripts/animation.py` ([design](docs/animation-design.md)). Generated
+*Sea surface temperature (`thetao`, top level) and sea ice (`siconc`, white) of 2023 at 0.25°, day
+by day, made by `scripts/animation.py` ([design](docs/animation-design.md)). Generated
 using E.U. Copernicus Marine Service Information
 ([10.48670/moi-00021](https://doi.org/10.48670/moi-00021)).*
 
