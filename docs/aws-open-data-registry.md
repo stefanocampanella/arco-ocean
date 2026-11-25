@@ -53,7 +53,7 @@ Description: |
   Cells are conservatively averaged from the native grids, with the sea fraction, cell areas and
   volumes needed to weigh them. The first version (0.25 degree, 10 levels, with waves, to June
   2021, Zarr version 2) stays in the bucket until the new one replaces it.
-Documentation: "[ARCO-OCEAN](https://github.com/inogs/arco-ocean)"
+Documentation: "[ARCO-OCEAN](https://github.com/stefanocampanella/arco-ocean)"
 Contact: scampanella@ogs.it
 ManagedBy: "[OGS](https://www.ogs.it/en/dynamics-ecosystems-and-computational-oceanography)"
 UpdateFrequency: Daily for the forecasts; the historical dataset and its statistics are fixed.
@@ -85,7 +85,7 @@ Resources:
 DataAtWork:
   Tutorials:
     - Title: Computing the Oceanic El Nino Index (ONI) with Xarray and ARCO-OCEAN
-      URL: https://github.com/inogs/arco-ocean/blob/main/tutorials/oni.py
+      URL: https://github.com/stefanocampanella/arco-ocean/blob/main/tutorials/oni.py
       AuthorName: OGS
       AuthorURL: https://github.com/inogs/
   Tools & Applications:

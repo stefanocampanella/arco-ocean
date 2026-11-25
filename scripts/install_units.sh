@@ -23,7 +23,7 @@ DESCRIPTION
         --keepalive     Also install the daily keepalive of the forecast watchdog
                         (scripts/keep_watchdog_enabled.sh; needs its token file).
         --keepalive-repo OWNER/REPO
-                        The repository of the watchdog (default: inogs/arco-ocean).
+                        The repository of the watchdog (default: stefanocampanella/arco-ocean).
         --no-start      Install and enable the timers, but do not start them now.
         --uninstall     Stop the timers and a collection running, and remove the units and
                         the drop-ins this script wrote (other drop-ins stay).

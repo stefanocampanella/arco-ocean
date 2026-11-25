@@ -50,7 +50,7 @@ Values are averages over the sea part of each cell. GLORYS12's sea ice thickness
 | `volcello`                           | Sea water volume of the cell: `seafrac` × layer thickness × `areacello` | float32   | m³    |
 | `lat_bnds`, `lon_bnds`, `depth_bnds` | CF cell bounds (depth: GLORYS12's layer faces)                          | float32   | ° / m |
 
-Ocean and sea ice values exist exactly where `seafrac > 0`. Volumes and heat contents are sums of value × `volcello`; areas and river totals use `areacello` (discharge in m³/s = `dis24_outlets` × `areacello` / 86400). The variables name these weights in `cell_measures`. How these fields are built, and why, is in the [notes on coarsening ocean datasets](https://github.com/stefanocampanella/arco-make/blob/master/docs/coarsen-ocean-datasets.md).
+Ocean and sea ice values exist exactly where `seafrac > 0`. Volumes and heat contents are sums of value × `volcello`; areas and river totals use `areacello` (discharge in m³/s = `dis24_outlets` × `areacello` / 86400). The variables name these weights in `cell_measures`. How these fields are built, and why, is in the [notes on coarsening ocean datasets](docs/coarsen-ocean-datasets.md).
 
 [^1]: Global Ocean Physics Reanalysis. E.U. Copernicus Marine Service Information (CMEMS). Marine Data Store (MDS). DOI: 10.48670/moi-00021 (Accessed on 10-Oct-2025)
 
@@ -240,7 +240,7 @@ Actions variables give the heartbeat's URL, `FORECAST_STATUS_URL`
 assign, `ALERT_ASSIGNEES` (comma-separated). GitHub disables the schedules of a public repository
 after 60 days without activity, warning by email first. The collecting machine keeps it enabled:
 `scripts/install_units.sh --keepalive` (`--keepalive-repo OWNER/REPO` for another repository than
-`inogs/arco-ocean`) adds a daily unit that runs
+`stefanocampanella/arco-ocean`) adds a daily unit that runs
 `scripts/keep_watchdog_enabled.sh`, which enables the watchdog again if GitHub disabled it for
 inactivity (a workflow disabled by hand stays so), and otherwise asks GitHub to enable it anyway,
 which tools doing the same report to reset the count of days (GitHub does not document it). It
@@ -314,9 +314,9 @@ The tutorials are [marimo](https://marimo.io) notebooks: `uvx marimo edit --sand
 
 ## Web page
 
-`site/` is the web page of ARCO-OCEAN: static files without a build step, deployed to GitHub
-Pages from `main` by `.github/workflows/pages.yml` (Pages enabled once, with "GitHub Actions" as
-source). Besides the dataset's description, it shows the state of the forecast collection,
+`site/` is the web page of ARCO-OCEAN (<https://stefanocampanella.github.io/arco-ocean/>):
+static files without a build step, deployed to GitHub Pages from `main` by
+`.github/workflows/pages.yml` (Pages enabled once, with "GitHub Actions" as source). Besides the dataset's description, it shows the state of the forecast collection,
 read every minute from its heartbeat (above): downloading, finished, stale or aborted, and each
 resolution's newest run. `site/status.js` decides the state; `site/dashboard.js` shows it. To
 preview it, serve the directory (`python -m http.server -d site`, module scripts do not load from
