@@ -29,10 +29,10 @@ dependencies = [
 
 [dependency-groups]
 # The coarsening notes' doctests and measurements (docs/) and the recipes' validation (tests/):
-# `uv run --only-group notes ...`. arco-make at the top of its pull-request stack (the recipes
-# use its forecast mode); move to its release (v0.2.0) once tagged.
+# `uv run --only-group notes ...`. arco-make v0.2.0, the release whose image the scripts run
+# (tests/test_image.py).
 notes = [
-    "arcomake[live] @ git+https://github.com/stefanocampanella/arco-make.git@441874f6db7e610f2ca5d45568620310c12e7373",
+    "arcomake[live] @ git+https://github.com/stefanocampanella/arco-make.git@v0.2.0",
     "pytest",
 ]
 
