@@ -38,7 +38,7 @@ DESCRIPTION
                                 with the years, beyond the project VM's at 0.25 deg).
         --streaming             The default (accepted, as before).
         --dask-setup SETUP      arco-make's Dask scheduler (default: threads).
-        --image IMAGE           Apptainer image (default: oras://ghcr.io/stefanocampanella/arco-make:latest).
+        --image IMAGE           Apptainer image (default: oras://ghcr.io/stefanocampanella/arco-make:v0.2.0).
         --virtual-env PATH      Run from a local virtual environment instead of Apptainer.
         --env-file FILE         Environment file to source (default: scripts/.env).
         --bind SRC[:DST[:OPTS]] Path to bind within the Apptainer container (repeatable).
@@ -55,7 +55,8 @@ STREAMING=true
 LOG_DIR=""
 REPLACE=false
 DASK_SETUP="threads"
-IMAGE="oras://ghcr.io/stefanocampanella/arco-make:latest"
+# The image of the arco-make version pinned in pyproject.toml (tests/test_image.py).
+IMAGE="oras://ghcr.io/stefanocampanella/arco-make:v0.2.0"
 VENV=""
 ENV_FILE="scripts/.env"
 BINDS=()

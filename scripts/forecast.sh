@@ -70,7 +70,8 @@ STATUS_URL=""
 HEARTBEAT=300
 STALE_AFTER=30
 MISSING_AFTER=2
-IMAGE="oras://ghcr.io/stefanocampanella/arco-make:latest"
+# The image of the arco-make version pinned in pyproject.toml (tests/test_image.py).
+IMAGE="oras://ghcr.io/stefanocampanella/arco-make:v0.2.0"
 VENV=""
 ENV_FILE="scripts/.env"
 BINDS=()
