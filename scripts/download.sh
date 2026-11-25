@@ -35,7 +35,10 @@ DESCRIPTION
         --project-dir DIR       Project root directory (default: current working directory).
         --config-dir DIR        Where to look for recipes (default: \${PROJECT_ROOT}/configs/download).
         --output PATH           Output repository: a directory, s3:// or gs:// URL (default:
-                                \$DATA_ROOT/data/<product>/res=<res>, from the recipe name).
+                                ROOT/<product>/res=<res>, from the recipe name).
+        --output-root ROOT      Where the default outputs go: a directory, s3:// or gs:// URL,
+                                e.g. s3://ogs-arco-ocean for the bucket's layout (default:
+                                \$DATA_ROOT/data, or the project's data/). Not with --output.
         --log-dir DIR           Where to write the log (default: \${PROJECT_ROOT}/logs/download).
         --start DATE            First day (YYYY-MM-DD): the recipes have no dates. Not with --extend.
         --end DATE              The day after the last (YYYY-MM-DD). Required.
@@ -61,6 +64,7 @@ EOF
 PROJECT_ROOT=""
 CONFIG_DIR=""
 OUTPUT=""
+OUTPUT_ROOT=""
 LOG_DIR=""
 START_DATE=""
 END_DATE=""
@@ -85,6 +89,8 @@ while [[ $# -gt 0 ]]; do
         --config-dir=*) CONFIG_DIR="${1#*=}"; shift ;;
         --output) OUTPUT="$2"; shift 2 ;;
         --output=*) OUTPUT="${1#*=}"; shift ;;
+        --output-root) OUTPUT_ROOT="$2"; shift 2 ;;
+        --output-root=*) OUTPUT_ROOT="${1#*=}"; shift ;;
         --log-dir) LOG_DIR="$2"; shift 2 ;;
         --log-dir=*) LOG_DIR="${1#*=}"; shift ;;
         --start) START_DATE="$2"; shift 2 ;;
@@ -115,6 +121,10 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if [[ -n "${OUTPUT}" && -n "${OUTPUT_ROOT}" ]]; then
+    echo "Error: give --output or --output-root, not both." >&2
+    exit 1
+fi
 RECIPE="${POSITIONAL_ARGS[0]:-}"
 if [[ -z "${RECIPE}" || ${#POSITIONAL_ARGS[@]} -gt 1 ]]; then
     echo "Error: give exactly one RECIPE." >&2
@@ -171,13 +181,14 @@ if [[ ! -f "${CONFIG_PATH}" ]]; then
 fi
 NAME="$(basename "${CONFIG_PATH}" .toml)"
 
-# Default output: <product>/res=<res>, from a recipe named <product>_res-<res>.
+# Default output: ROOT/<product>/res=<res>, from a recipe named <product>_res-<res>.
 if [[ -z "${OUTPUT}" ]]; then
     if [[ ! "${NAME}" =~ ^([a-z0-9-]+)_res-([0-9]+p[0-9]+)$ ]]; then
         echo "Error: cannot derive the output from '${NAME}' (expected <product>_res-<res>): give --output." >&2
         exit 1
     fi
-    OUTPUT="${DATA_ROOT:-${PROJECT_ROOT}}/data/${BASH_REMATCH[1]}/res=${BASH_REMATCH[2]}"
+    ROOT="${OUTPUT_ROOT:-${DATA_ROOT:-${PROJECT_ROOT}}/data}"
+    OUTPUT="${ROOT%/}/${BASH_REMATCH[1]}/res=${BASH_REMATCH[2]}"
 fi
 if [[ "${OUTPUT}" != *://* ]]; then
     mkdir -p "$(dirname "${OUTPUT}")"

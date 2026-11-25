@@ -48,14 +48,16 @@ DESCRIPTION
                                 stale when none finished for that long (default: 30).
         -h, --help              Show this help.
 
-    Other options (--image, --virtual-env, --env-file, --bind, --config-dir, --log-level) go to
-    scripts/download.sh, as given. Outputs are download.sh's defaults:
-    \$DATA_ROOT/data/forecast/res=<res>.
+    Other options (--image, --virtual-env, --env-file, --bind, --config-dir, --log-level,
+    --output-root) go to scripts/download.sh, as given. Outputs are download.sh's defaults:
+    ROOT/forecast/res=<res>, ROOT from --output-root (default: \$DATA_ROOT/data, or the
+    project's data/); the heartbeat reads them there.
 
     Examples:
         $0 --start 2026-07-01                 # the first time: backfill to today's run
         $0                                    # every day, from systemd (see README)
         $0 --status-url s3://BUCKET/status/forecast.json   # with the web page's heartbeat
+        $0 --output-root s3://BUCKET          # the repositories at s3://BUCKET/forecast/res=<res>
 EOF
 }
 
@@ -74,6 +76,7 @@ MISSING_AFTER=2
 IMAGE="oras://ghcr.io/stefanocampanella/arco-make:v0.2.0"
 VENV=""
 ENV_FILE="scripts/.env"
+OUTPUT_ROOT=""
 BINDS=()
 PASS=()
 
@@ -110,6 +113,8 @@ while [[ $# -gt 0 ]]; do
         --env-file=*) ENV_FILE="${1#*=}"; PASS+=("$1"); shift ;;
         --bind) BINDS+=("$2"); PASS+=("$1" "$2"); shift 2 ;;
         --bind=*) BINDS+=("${1#*=}"); PASS+=("$1"); shift ;;
+        --output-root) OUTPUT_ROOT="$2"; PASS+=("$1" "$2"); shift 2 ;;
+        --output-root=*) OUTPUT_ROOT="${1#*=}"; PASS+=("$1"); shift ;;
         --config-dir|--log-level)
             PASS+=("$1" "$2"); shift 2 ;;
         --config-dir=*|--log-level=*)
@@ -196,9 +201,10 @@ trap 'exit 143' TERM
 if [[ -n "${STATUS_URL}" ]]; then
     REPOS=()
     IFS=',' read -r -a RES_LIST <<< "${RESOLUTIONS}"
+    # scripts/download.sh's default output for the recipe forecast_res-<res>.
+    ROOT="${OUTPUT_ROOT:-${DATA_ROOT:-${PROJECT_ROOT}}/data}"
     for RES in "${RES_LIST[@]}"; do
-        # scripts/download.sh's default output for the recipe forecast_res-<res>.
-        REPOS+=(--repo "${RES}=${DATA_ROOT:-${PROJECT_ROOT}}/data/forecast/res=${RES}")
+        REPOS+=(--repo "${RES}=${ROOT%/}/forecast/res=${RES}")
     done
     status start --target-run "$(date -u -d "${END_DATE} - 1 day" +%Y-%m-%d)" \
         --heartbeat-seconds "${HEARTBEAT}" --stale-after-hours "${STALE_AFTER}" \

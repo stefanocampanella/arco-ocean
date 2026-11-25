@@ -16,9 +16,10 @@ import pytest
 
 SCRIPTS = pathlib.Path(__file__).parents[1] / "scripts"
 
-# Exits with the code given for its recipe's resolution (FAKE_CODES="1p0=75,0p5=1"; default 0),
-# after FAKE_SLEEP seconds.
+# Records its arguments in $CALLS, if set; exits with the code given for its recipe's resolution
+# (FAKE_CODES="1p0=75,0p5=1"; default 0), after FAKE_SLEEP seconds.
 FAKE_DOWNLOAD = """#!/usr/bin/env bash
+if [[ -n "${CALLS:-}" ]]; then echo "$*" >> "${CALLS}"; fi
 RECIPE="${@: -1}"
 RES="${RECIPE#forecast_res-}"
 sleep "${FAKE_SLEEP:-0}"
@@ -145,3 +146,21 @@ def test_without_status_url_there_is_no_heartbeat(project) -> None:
   assert process.returncode == 0, process.stdout + process.stderr
   assert not (project / "www").exists()
   assert not (project / "logs" / "forecast" / "status.json").exists()
+
+
+def test_an_output_root_goes_to_the_downloads_and_the_heartbeat(project) -> None:
+  calls = project / "calls"
+  process = start(project, "--output-root", "s3://bucket", CALLS=str(calls))
+  output, _ = process.communicate(timeout=120)
+  assert process.returncode == 0, output
+  lines = calls.read_text().splitlines()
+  assert len(lines) == 2
+  assert all("--output-root s3://bucket" in line for line in lines)
+  # The heartbeat reads the repositories where the downloads write them (kept in the state
+  # file, not published).
+  state = json.loads((project / "logs" / "forecast" / "status.json").read_text())
+  assert state["repositories"] == {
+    "0p5": "s3://bucket/forecast/res=0p5",
+    "1p0": "s3://bucket/forecast/res=1p0",
+  }
+  assert "s3://bucket" not in (project / "www" / "forecast.json").read_text()

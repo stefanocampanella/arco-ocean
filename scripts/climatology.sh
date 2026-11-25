@@ -27,9 +27,12 @@ DESCRIPTION
     Options:
         --project-dir DIR       Project root directory (default: current working directory).
         --config-dir DIR        Where to look for recipes (default: \${PROJECT_ROOT}/configs/climatology).
-        --input PATH            Input dataset (default: \$DATA_ROOT/data/<product>/res=<res>).
+        --input PATH            Input dataset (default: ROOT/<product>/res=<res>).
         --output PATH           Statistics output, groups climatology and anomaly_std
-                                (default: \$DATA_ROOT/data/statistics/res=<res>).
+                                (default: ROOT/statistics/res=<res>).
+        --output-root ROOT      Where the downloads' outputs are and the statistics go, as
+                                download.sh's --output-root, e.g. s3://ogs-arco-ocean (default:
+                                \$DATA_ROOT/data, or the project's data/).
         --log-dir DIR           Where to write the log (default: \${PROJECT_ROOT}/logs/climatology).
         --replace               Write a new version of an existing output (arco-make --replace).
         --graph                 One Dask graph (arco-make --graph) instead of streaming the series
@@ -51,6 +54,7 @@ PROJECT_ROOT=""
 CONFIG_DIR=""
 INPUT=""
 OUTPUT=""
+OUTPUT_ROOT=""
 STREAMING=true
 LOG_DIR=""
 REPLACE=false
@@ -73,6 +77,8 @@ while [[ $# -gt 0 ]]; do
         --input=*) INPUT="${1#*=}"; shift ;;
         --output) OUTPUT="$2"; shift 2 ;;
         --output=*) OUTPUT="${1#*=}"; shift ;;
+        --output-root) OUTPUT_ROOT="$2"; shift 2 ;;
+        --output-root=*) OUTPUT_ROOT="${1#*=}"; shift ;;
         --streaming) STREAMING=true; shift ;;
         --graph) STREAMING=false; shift ;;
         --log-dir) LOG_DIR="$2"; shift 2 ;;
@@ -134,7 +140,8 @@ if [[ -z "${INPUT}" || -z "${OUTPUT}" ]]; then
         echo "Error: cannot derive paths from '${NAME}' (expected <product>_res-<res>): give --input and --output." >&2
         exit 1
     fi
-    DATA="${DATA_ROOT:-${PROJECT_ROOT}}/data"
+    DATA="${OUTPUT_ROOT:-${DATA_ROOT:-${PROJECT_ROOT}}/data}"
+    DATA="${DATA%/}"
     INPUT="${INPUT:-${DATA}/${BASH_REMATCH[1]}/res=${BASH_REMATCH[2]}}"
     OUTPUT="${OUTPUT:-${DATA}/statistics/res=${BASH_REMATCH[2]}}"
 fi
