@@ -72,7 +72,7 @@ Tags:
   - weather
   - zarr
 License: "[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); the sources' credits (each repository's `attribution` attribute) must accompany the data."
-Citation: "Campanella, S., Salon, S., Querin, S., Bortolussi, L., and Stock, J.: ARCO-OCEAN: A dataset of physical properties of the ocean and sea ice, with hydrological and atmospheric forcing, optimized for machine learning, https://doi.org/10.5281/zenodo.24471954, accessed on DD-MM-YYYY."
+Citation: "Campanella, S., Salon, S., Querin, S., and Bortolussi, L.: ARCO-OCEAN: A dataset of physical properties of the ocean and sea ice, with hydrological and atmospheric forcing, optimized for machine learning, https://doi.org/10.5281/zenodo.24471954, accessed on DD-MM-YYYY."
 Resources:
   - Description: Icechunk repositories (Zarr version 3) of the historical dataset, its statistics and the forecasts, at three resolutions
     ARN: arn:aws:s3:::ogs-arco-ocean
