@@ -5,6 +5,7 @@ repository and a local published file."""
 
 import importlib.util
 import json
+import os
 import pathlib
 import re
 import tomllib
@@ -147,6 +148,26 @@ def test_a_new_collection_keeps_the_newest_runs_known(tmp_path, files, monkeypat
   assert entry["latest_run"] == "2026-11-23"
   assert entry["error"] is not None and str(repo) not in entry["error"]
   assert document["state"] == "running" and document["ended_at"] is None
+
+
+def test_the_settings_apply_before_the_repositories_are_read(tmp_path, files, monkeypatch) -> None:
+  # The units run without the shell's environment: the AWS profile of ~/.arcomakerc must reach
+  # the reads of repositories in the bucket, not only the upload (25 Nov).
+  state, published = files
+  rc = tmp_path / "arcomakerc"
+  rc.write_text("AWS_PROFILE=probe-profile\n")
+  monkeypatch.setenv("ARCOMAKE_RC", str(rc))
+  monkeypatch.delenv("AWS_PROFILE", raising=False)
+  monkeypatch.delenv("AWS_DEFAULT_PROFILE", raising=False)
+  seen = []
+
+  def summary(path: str) -> dict:
+    seen.append(os.environ.get("AWS_PROFILE"))
+    return {"latest_run": None, "runs": None, "flags": {}}
+
+  monkeypatch.setattr(forecast_status, "repository_summary", summary)
+  run(state, published, "start", "--target-run", "2026-11-24", "--repo", "1p0=s3://bucket/x")
+  assert seen == ["probe-profile"]
 
 
 def test_steps_need_a_started_collection(files) -> None:

@@ -49,13 +49,15 @@ DESCRIPTION
         -h, --help              Show this help.
 
     Other options (--image, --virtual-env, --env-file, --bind, --config-dir, --log-level) go to
-    scripts/download.sh, as given. Outputs are download.sh's defaults:
-    \$DATA_ROOT/data/forecast/res=<res>.
+    scripts/download.sh, as given. Outputs are DATA_ROOT/forecast/res=<res>: --data-root ROOT
+    gives it, else scripts/settings.sh (resolved once, and given to every download); the
+    heartbeat reads them there.
 
     Examples:
         $0 --start 2026-07-01                 # the first time: backfill to today's run
         $0                                    # every day, from systemd (see README)
         $0 --status-url s3://BUCKET/status/forecast.json   # with the web page's heartbeat
+        $0 --data-root s3://BUCKET            # the repositories at s3://BUCKET/forecast/res=<res>
 EOF
 }
 
@@ -74,6 +76,8 @@ MISSING_AFTER=2
 IMAGE="oras://ghcr.io/stefanocampanella/arco-make:v0.2.0"
 VENV=""
 ENV_FILE="scripts/.env"
+ROOT_OPTION=""
+ROOT_GIVEN=false
 BINDS=()
 PASS=()
 
@@ -110,6 +114,8 @@ while [[ $# -gt 0 ]]; do
         --env-file=*) ENV_FILE="${1#*=}"; PASS+=("$1"); shift ;;
         --bind) BINDS+=("$2"); PASS+=("$1" "$2"); shift 2 ;;
         --bind=*) BINDS+=("${1#*=}"); PASS+=("$1"); shift ;;
+        --data-root) ROOT_OPTION="$2"; ROOT_GIVEN=true; shift 2 ;;
+        --data-root=*) ROOT_OPTION="${1#*=}"; ROOT_GIVEN=true; shift ;;
         --config-dir|--log-level)
             PASS+=("$1" "$2"); shift 2 ;;
         --config-dir=*|--log-level=*)
@@ -132,9 +138,18 @@ if ! [[ "${STALE_AFTER}" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
     exit 1
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="${PROJECT_ROOT:-$(pwd)}"
 cd "${PROJECT_ROOT}" || exit 1
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Where outputs go (DATA_ROOT): scripts/settings.sh. Resolved once, here, and given to every
+# download (--data-root), so the heartbeat reads where they write.
+# shellcheck source=/dev/null
+if ! source "${SCRIPT_DIR}/settings.sh"; then
+    echo "Error: ${SCRIPT_DIR}/settings.sh is missing: the scripts need it." >&2
+    exit 1
+fi
+resolve_data_root "${ENV_FILE}" "${ROOT_GIVEN}" "${ROOT_OPTION}" || exit 1
 END_DATE="${END_DATE:-$(date -u -d tomorrow +%Y-%m-%d)}"
 LOG_DIR="${LOG_DIR:-${PROJECT_ROOT}/logs/forecast}"
 mkdir -p "${LOG_DIR}"
@@ -152,10 +167,6 @@ STATUS_FILE="${LOG_DIR}/status.json"
 HEARTBEAT_PID=""
 ENDED=false
 if [[ -n "${STATUS_URL}" ]]; then
-    if [[ -n "${ENV_FILE}" && -f "${ENV_FILE}" ]]; then
-        # shellcheck source=/dev/null
-        source "${ENV_FILE}"
-    fi
     if [[ -n "${VENV}" ]]; then
         STATUS_PY=("${VENV}/bin/python")
     else
@@ -196,9 +207,10 @@ trap 'exit 143' TERM
 if [[ -n "${STATUS_URL}" ]]; then
     REPOS=()
     IFS=',' read -r -a RES_LIST <<< "${RESOLUTIONS}"
+    # scripts/download.sh's default output for the recipe forecast_res-<res>.
     for RES in "${RES_LIST[@]}"; do
-        # scripts/download.sh's default output for the recipe forecast_res-<res>.
-        REPOS+=(--repo "${RES}=${DATA_ROOT:-${PROJECT_ROOT}}/data/forecast/res=${RES}")
+        REPO="$(default_output forecast "${RES}")" || exit 1
+        REPOS+=(--repo "${RES}=${REPO}")
     done
     status start --target-run "$(date -u -d "${END_DATE} - 1 day" +%Y-%m-%d)" \
         --heartbeat-seconds "${HEARTBEAT}" --stale-after-hours "${STALE_AFTER}" \
@@ -237,7 +249,7 @@ for RES in "${RES_LIST[@]}"; do
     CODE=0
     "${SCRIPT_DIR}/download.sh" --project-dir "${PROJECT_ROOT}" --log-dir "${LOG_DIR}" \
         "${MODE[@]}" --end "${END_DATE}" --attempts "${ATTEMPTS}" --retry-delay "${RETRY_DELAY}" \
-        "${PASS[@]+"${PASS[@]}"}" "forecast_res-${RES}" || CODE=$?
+        --data-root "${DATA_ROOT}" "${PASS[@]+"${PASS[@]}"}" "forecast_res-${RES}" || CODE=$?
     if [[ ${CODE} -eq 0 ]]; then
         status res "${RES}" finished
     elif [[ ${CODE} -eq ${NOT_PUBLISHED} ]]; then

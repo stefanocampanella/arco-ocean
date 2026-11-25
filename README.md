@@ -141,12 +141,35 @@ The recipes have no dates: the command gives them, so one recipe serves the firs
 every later extension, and the fingerprint of the recipe recorded in each commit stays the same.
 
 ```bash
-# The whole period, at one resolution (about three days on the project machine).
-scripts/download.sh --start 1993-01-01 --end 2026-07-01 historical_res-0p25
+# The whole period, at one resolution (DATA_ROOT/historical/res=0p25; about four days on the
+# project machine).
+scripts/download.sh --bind /data --start 1993-01-01 --end 2026-07-01 historical_res-0p25
 # Later: the days after the last stored one, as a new version, once every source has them as
 # final data (ERA5 lags by about three months).
-scripts/download.sh --extend --end 2026-10-01 historical_res-0p25
+scripts/download.sh --bind /data --extend --end 2026-10-01 historical_res-0p25
+# The statistics of a resolution (DATA_ROOT/statistics/res=0p25).
+scripts/climatology.sh --bind /data historical_res-0p25
 ```
+
+The outputs are `DATA_ROOT/<product>/res=<res>`, the bucket's layout with
+`DATA_ROOT=s3://ogs-arco-ocean`. `DATA_ROOT` comes from the scripts' `--data-root`, the
+environment, the scripts' settings file, `scripts/.env` (`$SCRATCH/arco-ocean` on clusters that
+have one), else the project's `data/` (`scripts/settings.sh`); `--output` names one output
+instead. The settings file, `~/.config/arco-ocean/settings` (`ARCO_OCEAN_SETTINGS` names another,
+empty disables it), is read by the units too:
+
+```bash
+# ~/.config/arco-ocean/settings on the project machine
+DATA_ROOT=s3://ogs-arco-ocean
+```
+
+A 0.25° historical repository takes several terabytes: write it to the bucket, not to a local
+disk. The scripts' settings stay apart from arco-make's (`~/.arcomakerc`, below), which holds
+secrets, and which arco-make warns about for any key it does not know.
+
+The image sees only the home directory, `/tmp` and the current directory: a path elsewhere that
+arco-make uses (its `TMPDIR`, a local output) must be bound with `--bind` (`/data` on the project
+machine). Otherwise arco-make stops at once, its `TMPDIR` "not an existing, writable directory".
 
 A block that fails with a transient error (a timeout, a dropped connection, a server error) is
 redone, as the recipe's `[retries]` say: a historical block waits out an hour of outage of a
@@ -179,15 +202,21 @@ them at every resolution: the first time with `--start`, from the end of the his
 then every day, adding the runs after the last stored one (a missed day is caught up).
 
 ```bash
-# The first time: every run from the end of the historical dataset to today's.
-scripts/forecast.sh --start 2026-07-01
-# Then every day at 12:00 UTC, from systemd (below), with the heartbeat for the web page:
-scripts/install_units.sh -- --image FILE        # or --virtual-env DIR
+# The first time: every run from the end of the historical dataset to today's, with the
+# heartbeat for the web page (DATA_ROOT/forecast/res=<res>).
+scripts/forecast.sh --bind /data --status-url s3://ogs-arco-ocean/status/forecast.json \
+    --start 2026-07-01
+# Then every day at 12:00 UTC, from systemd (below), once the backfill is stored: the units
+# extend the repositories, and fail while there are none.
+scripts/install_units.sh --keepalive -- --bind /data
 ```
 
-Settings and credentials come from arco-make's settings file, `~/.arcomakerc`, which the
-heartbeat reads too. The scripts also source `scripts/.env` (`--env-file` for another), which
-sets only where data go (`DATA_ROOT`).
+arco-make's settings and credentials come from its settings file, `~/.arcomakerc`, which the
+heartbeat reads too: the AWS profile included (`AWS_PROFILE` or `AWS_DEFAULT_PROFILE`). The
+units do not read the shell's profile, so a variable exported there (by hand, or in `~/.bashrc`)
+reaches commands run by hand but not the daily collection: put arco-make's in `~/.arcomakerc`,
+the scripts' `DATA_ROOT` in their settings file. The scripts also source `scripts/.env`
+(`--env-file` for another), which sets only `DATA_ROOT`.
 
 The daily collection runs as systemd user units, versioned in `systemd/`:
 `arco-ocean-forecast.timer` starts `arco-ocean-forecast.service`, which runs

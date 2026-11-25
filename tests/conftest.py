@@ -1,8 +1,19 @@
 # SPDX-FileCopyrightText: 2026 Stefano Campanella
 # SPDX-License-Identifier: MIT
-"""Tests marked `live` read the real sources: skipped unless pytest is given `--live`."""
+"""Tests marked `live` read the real sources: skipped unless pytest is given `--live`. Every other
+test runs without arco-make's settings file, which holds credentials, and without the scripts'
+settings file (scripts/settings.sh), which would send their outputs elsewhere."""
 
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def no_settings_file(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+  """Empty, ARCOMAKE_RC disables ~/.arcomakerc and ARCO_OCEAN_SETTINGS the scripts' settings
+  file, in this process and in the scripts it runs."""
+  if "live" not in request.keywords:
+    monkeypatch.setenv("ARCOMAKE_RC", "")
+  monkeypatch.setenv("ARCO_OCEAN_SETTINGS", "")
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:

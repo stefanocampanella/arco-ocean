@@ -35,7 +35,11 @@ DESCRIPTION
         --project-dir DIR       Project root directory (default: current working directory).
         --config-dir DIR        Where to look for recipes (default: \${PROJECT_ROOT}/configs/download).
         --output PATH           Output repository: a directory, s3:// or gs:// URL (default:
-                                \$DATA_ROOT/data/<product>/res=<res>, from the recipe name).
+                                DATA_ROOT/<product>/res=<res>, from the recipe name).
+        --data-root ROOT        Where the default outputs go, DATA_ROOT: a directory, s3:// or
+                                gs:// URL, e.g. s3://ogs-arco-ocean, the bucket's layout (default:
+                                the environment's, the settings file's, scripts/.env's, else
+                                the project's data/: scripts/settings.sh). Not with --output.
         --log-dir DIR           Where to write the log (default: \${PROJECT_ROOT}/logs/download).
         --start DATE            First day (YYYY-MM-DD): the recipes have no dates. Not with --extend.
         --end DATE              The day after the last (YYYY-MM-DD). Required.
@@ -61,6 +65,8 @@ EOF
 PROJECT_ROOT=""
 CONFIG_DIR=""
 OUTPUT=""
+ROOT_OPTION=""
+ROOT_GIVEN=false
 LOG_DIR=""
 START_DATE=""
 END_DATE=""
@@ -85,6 +91,8 @@ while [[ $# -gt 0 ]]; do
         --config-dir=*) CONFIG_DIR="${1#*=}"; shift ;;
         --output) OUTPUT="$2"; shift 2 ;;
         --output=*) OUTPUT="${1#*=}"; shift ;;
+        --data-root) ROOT_OPTION="$2"; ROOT_GIVEN=true; shift 2 ;;
+        --data-root=*) ROOT_OPTION="${1#*=}"; ROOT_GIVEN=true; shift ;;
         --log-dir) LOG_DIR="$2"; shift 2 ;;
         --log-dir=*) LOG_DIR="${1#*=}"; shift ;;
         --start) START_DATE="$2"; shift 2 ;;
@@ -115,6 +123,10 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if [[ -n "${OUTPUT}" && "${ROOT_GIVEN}" == true ]]; then
+    echo "Error: give --output or --data-root, not both." >&2
+    exit 1
+fi
 RECIPE="${POSITIONAL_ARGS[0]:-}"
 if [[ -z "${RECIPE}" || ${#POSITIONAL_ARGS[@]} -gt 1 ]]; then
     echo "Error: give exactly one RECIPE." >&2
@@ -146,17 +158,17 @@ if ! [[ "${RETRY_DELAY}" =~ ^[0-9]+$ ]]; then
     exit 1
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="${PROJECT_ROOT:-$(pwd)}"
 cd "${PROJECT_ROOT}" || exit 1
 
-if [[ -n "${ENV_FILE}" ]]; then
-    if [[ ! -f "${ENV_FILE}" ]]; then
-        echo "Error: environment file '${ENV_FILE}' not found." >&2
-        exit 1
-    fi
-    # shellcheck source=/dev/null
-    source "${ENV_FILE}"
+# Where outputs go (DATA_ROOT): scripts/settings.sh.
+# shellcheck source=/dev/null
+if ! source "${SCRIPT_DIR}/settings.sh"; then
+    echo "Error: ${SCRIPT_DIR}/settings.sh is missing: the scripts need it." >&2
+    exit 1
 fi
+resolve_data_root "${ENV_FILE}" "${ROOT_GIVEN}" "${ROOT_OPTION}" || exit 1
 
 # Resolve the recipe.
 CONFIG_DIR="${CONFIG_DIR:-${PROJECT_ROOT}/configs/download}"
@@ -171,13 +183,13 @@ if [[ ! -f "${CONFIG_PATH}" ]]; then
 fi
 NAME="$(basename "${CONFIG_PATH}" .toml)"
 
-# Default output: <product>/res=<res>, from a recipe named <product>_res-<res>.
+# Default output: DATA_ROOT/<product>/res=<res>, from a recipe named <product>_res-<res>.
 if [[ -z "${OUTPUT}" ]]; then
     if [[ ! "${NAME}" =~ ^([a-z0-9-]+)_res-([0-9]+p[0-9]+)$ ]]; then
         echo "Error: cannot derive the output from '${NAME}' (expected <product>_res-<res>): give --output." >&2
         exit 1
     fi
-    OUTPUT="${DATA_ROOT:-${PROJECT_ROOT}}/data/${BASH_REMATCH[1]}/res=${BASH_REMATCH[2]}"
+    OUTPUT="$(default_output "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}")" || exit 1
 fi
 if [[ "${OUTPUT}" != *://* ]]; then
     mkdir -p "$(dirname "${OUTPUT}")"
