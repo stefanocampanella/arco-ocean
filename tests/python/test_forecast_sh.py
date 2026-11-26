@@ -14,7 +14,7 @@ import time
 
 import pytest
 
-SCRIPTS = pathlib.Path(__file__).parents[1] / "scripts"
+SCRIPTS = pathlib.Path(__file__).parents[2] / "scripts"
 
 # Records its arguments in $CALLS, if set; exits with the code given for its recipe's resolution
 # (FAKE_CODES="1p0=75,0p5=1"; default 0), after FAKE_SLEEP seconds.
@@ -38,7 +38,7 @@ pytestmark = pytest.mark.skipif(
 def project(tmp_path: pathlib.Path) -> pathlib.Path:
   scripts = tmp_path / "scripts"
   scripts.mkdir()
-  for name in ("forecast.sh", "forecast_status.py", "settings.sh", ".env"):
+  for name in ("forecast.sh", "settings.sh", ".env"):
     shutil.copy(SCRIPTS / name, scripts / name)
   (scripts / "download.sh").write_text(FAKE_DOWNLOAD)
   (scripts / "download.sh").chmod(0o755)
@@ -46,15 +46,15 @@ def project(tmp_path: pathlib.Path) -> pathlib.Path:
 
 
 def start(project: pathlib.Path, *args: str, **env: str) -> subprocess.Popen:
-  # The heartbeat runs with this interpreter's environment (--virtual-env).
-  venv = pathlib.Path(sys.prefix)
+  # The heartbeat runs the `arco-ocean` of this interpreter's environment.
+  cli = pathlib.Path(sys.prefix) / "bin" / "arco-ocean"
   return subprocess.Popen(
     [
       "bash", str(project / "scripts" / "forecast.sh"), "--project-dir", str(project),
-      "--virtual-env", str(venv), "--status-url", str(project / "www" / "forecast.json"),
+      "--status-url", str(project / "www" / "forecast.json"),
       "--res", "0p5,1p0", "--end", "2026-11-25", *args,
     ],
-    env={**os.environ, "DATA_ROOT": str(project), **env},
+    env={**os.environ, "DATA_ROOT": str(project), "ARCO_OCEAN_CLI": str(cli), **env},
     stdout=subprocess.PIPE,
     stderr=subprocess.STDOUT,
     text=True,

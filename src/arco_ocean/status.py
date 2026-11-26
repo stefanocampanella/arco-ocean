@@ -1,0 +1,378 @@
+# SPDX-FileCopyrightText: 2026 Stefano Campanella
+# SPDX-License-Identifier: MIT
+"""The forecast collection's heartbeat: a JSON document that the ARCO-OCEAN web page reads.
+
+`scripts/forecast.sh` runs `arco-ocean status` at each step of a collection, and every few
+minutes while it runs. Each call updates a local state file and, with `--publish`, uploads the
+document (to an `s3://` URL, or to a local path). The repositories (local or `s3://`) are read and
+the document uploaded with arco-make's settings (`~/.arcomakerc`: the AWS profile), applied first.
+The page tells from it whether the latest collection is running, finished or aborted, and calls it
+stale when the heartbeat stops or no collection finished for too long: a collection killed without
+notice (the machine down, a signal that cannot be trapped) stops beating.
+
+The document is `Heartbeat` (`arco-ocean heartbeat-schema` prints its JSON Schema), all times in
+UTC. A resolution's `waiting_since` is when its collections started to end with a run not
+published (the first of them in a row), kept until one stores every run; `missing_after_days` is
+the recipes' `[forecast] missing_after`. A page calls the collection stale when a resolution's
+newest run is older than that, or has waited longer: a source that stopped publishing keeps a
+resolution waiting (its older runs are stored without it, flagged), every day.
+
+The state file is `State`: the document and the repositories' paths and URLs, which are not
+published.
+"""
+
+import contextlib
+import dataclasses
+import datetime
+import fcntl
+import json
+import os
+import pathlib
+import tempfile
+from collections.abc import Callable, Generator
+from typing import Annotated, Any, Literal, get_args
+
+import click
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, PlainSerializer
+
+SCHEMA = 1
+CollectionState = Literal["running", "finished", "aborted"]
+ResolutionState = Literal["pending", "downloading", "finished", "not_published", "failed"]
+# Dimensions of the forecast recipes (arco-make's defaults).
+INIT_DIM = "init_time"
+LEAD_DIM = "lead_time"
+
+# A time in UTC, to the second, as "2026-11-24T12:00:03Z".
+Time = Annotated[
+  AwareDatetime,
+  PlainSerializer(
+    lambda value: value.astimezone(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"), return_type=str
+  ),
+]
+
+
+def now() -> datetime.datetime:
+  return datetime.datetime.now(datetime.UTC).replace(microsecond=0)
+
+
+class Resolution(BaseModel):
+  """One resolution of a collection: its download's state and its repository's newest run."""
+
+  model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+  res: str = Field(description='The resolution, as in the repository\'s name: "0p25"')
+  state: ResolutionState = "pending"
+  started_at: Time | None = None
+  ended_at: Time | None = None
+  latest_run: datetime.date | None = Field(None, description="The newest run stored")
+  runs: int | None = Field(None, description="The number of runs stored")
+  flags: dict[str, float] = Field(
+    default_factory=dict,
+    description="Each flag variable: the share of the newest run's lead times that are true",
+  )
+  waiting_since: Time | None = None
+  error: str | None = Field(None, description="Why the repository could not be read")
+
+
+class Heartbeat(BaseModel):
+  """The published document."""
+
+  model_config = ConfigDict(extra="forbid", populate_by_name=True, validate_assignment=True)
+
+  schema_version: Literal[1] = Field(SCHEMA, alias="schema")
+  state: CollectionState
+  detail: str | None = None
+  started_at: Time
+  updated_at: Time = Field(description="The heartbeat: the last update")
+  ended_at: Time | None = None
+  heartbeat_seconds: int
+  stale_after_hours: float
+  missing_after_days: float
+  target_run: datetime.date = Field(description="The newest run asked for")
+  resolutions: list[Resolution]
+
+
+class State(Heartbeat):
+  """The state file: the document, and where each resolution's repository is."""
+
+  repositories: dict[str, str] = Field(default_factory=dict)
+
+  def public(self) -> str:
+    """The published document, without the repositories' paths and URLs."""
+    shown = self.model_dump(mode="json", by_alias=True, exclude={"repositories"})
+    return json.dumps(shown, indent=2) + "\n"
+
+
+@contextlib.contextmanager
+def locked(state_file: pathlib.Path) -> Generator[None]:
+  """The heartbeat loop and the steps of the collection update the state file in turn."""
+  lock = state_file.with_name(state_file.name + ".lock")
+  lock.parent.mkdir(parents=True, exist_ok=True)
+  with lock.open("w") as handle:
+    fcntl.flock(handle, fcntl.LOCK_EX)
+    yield
+
+
+def load(state_file: pathlib.Path) -> State | None:
+  try:
+    return State.model_validate_json(state_file.read_text())
+  except FileNotFoundError:
+    return None
+
+
+def write_atomically(path: pathlib.Path, text: str) -> None:
+  path.parent.mkdir(parents=True, exist_ok=True)
+  with tempfile.NamedTemporaryFile("w", dir=path.parent, delete=False, suffix=".tmp") as tmp:
+    tmp.write(text)
+  os.replace(tmp.name, path)
+
+
+def publish(url: str, body: str) -> None:
+  """Upload `body` to an `s3://` URL (never cached by browsers: the page polls it), or write it
+  to a local path."""
+  if not url.startswith("s3://"):
+    write_atomically(pathlib.Path(url), body)
+    return
+  import botocore.session
+
+  bucket, _, key = url.removeprefix("s3://").partition("/")
+  if not bucket or not key:
+    raise ValueError(f"not an object URL: {url}")
+  session = botocore.session.Session()
+  # botocore follows S3's redirect to the bucket's region, whatever the profile's.
+  region = session.get_config_variable("region") or "us-east-1"
+  client = session.create_client("s3", region_name=region)
+  client.put_object(
+    Bucket=bucket,
+    Key=key,
+    Body=body.encode(),
+    ContentType="application/json",
+    CacheControl="no-cache, max-age=0",
+  )
+
+
+def repository_summary(path: str) -> dict[str, Any]:
+  """The newest run in the forecast repository at `path` (on `main`), the number of runs, and,
+  for each flag variable (bool, init x lead), the share of that run's lead times flagged."""
+  import xarray as xr
+  from arcomake import icechunk_utils
+
+  if not icechunk_utils.is_repository(path):
+    return {"latest_run": None, "runs": None, "flags": {}}
+  dataset = xr.open_zarr(icechunk_utils.readonly_store(path), consolidated=False)
+  init = dataset[INIT_DIM]
+  if init.size == 0:
+    return {"latest_run": None, "runs": 0, "flags": {}}
+  latest = init.values.max()
+  flags = {
+    str(name): round(float(variable.sel({INIT_DIM: latest}).mean()), 3)
+    for name, variable in dataset.data_vars.items()
+    if variable.dtype == bool and set(variable.dims) == {INIT_DIM, LEAD_DIM}
+  }
+  day = datetime.date.fromisoformat(str(latest.astype("datetime64[D]")))
+  return {"latest_run": day, "runs": int(init.size), "flags": flags}
+
+
+def summarize(entry: Resolution, path: str | None) -> None:
+  """Add the repository's summary to a resolution's entry; a failure is recorded, not raised:
+  the heartbeat never stops a collection."""
+  if path is None:
+    return
+  try:
+    summary = repository_summary(path)
+  except Exception as error:  # noqa: BLE001 (reported in the document)
+    entry.error = f"the repository could not be read: {type(error).__name__}"
+    return
+  entry.latest_run = summary["latest_run"]
+  entry.runs = summary["runs"]
+  entry.flags = summary["flags"]
+  entry.error = None
+
+
+def apply_settings() -> None:
+  """The AWS profile and other settings from ~/.arcomakerc, as arco-make itself reads them: the
+  systemd units run without the shell's environment."""
+  from arcomake import settings
+
+  settings.apply(settings.read(settings.settings_path()))
+
+
+@dataclasses.dataclass(frozen=True)
+class Files:
+  """Where the command keeps the state and publishes the document (the group's options)."""
+
+  state_file: pathlib.Path
+  publish: str | None
+
+
+pass_files = click.make_pass_decorator(Files)
+
+
+def update(files: Files, change: Callable[[State | None], State | None]) -> None:
+  """Apply `change` to the state file, under its lock, then publish the document. A change that
+  returns None leaves both as they are."""
+  # Before any read: the repositories may be in the bucket (DATA_ROOT, scripts/settings.sh).
+  apply_settings()
+  with locked(files.state_file):
+    state = change(load(files.state_file))
+    if state is None:
+      return
+    state.updated_at = now()
+    write_atomically(files.state_file, state.model_dump_json(indent=2, by_alias=True) + "\n")
+    if files.publish is not None:
+      publish(files.publish, state.public())
+
+
+def started(state: State | None, files: Files) -> State:
+  if state is None:
+    raise click.ClickException(f"no collection started: {files.state_file} is missing")
+  return state
+
+
+def repository_option(
+  _context: click.Context, _parameter: click.Parameter, values: tuple[str, ...]
+) -> dict[str, str]:
+  repositories = {}
+  for value in values:
+    res, separator, path = value.partition("=")
+    if not separator or not res or not path:
+      raise click.BadParameter(f"{value!r} is not RES=PATH")
+    repositories[res] = path
+  return repositories
+
+
+@click.group()
+@click.option(
+  "--state-file", type=click.Path(path_type=pathlib.Path), required=True, help="The state file."
+)
+@click.option("--publish", help="s3:// URL or local path of the published document.")
+@click.pass_context
+def status(context: click.Context, state_file: pathlib.Path, publish: str | None) -> None:
+  """The forecast collection's heartbeat (scripts/forecast.sh)."""
+  context.obj = Files(state_file, publish)
+
+
+@status.command()
+@click.option(
+  "--target-run",
+  type=click.DateTime(["%Y-%m-%d"]),
+  required=True,
+  help="The newest run asked for (YYYY-MM-DD).",
+)
+@click.option(
+  "--repo",
+  "repositories",
+  multiple=True,
+  callback=repository_option,
+  help="RES=PATH, one per resolution.",
+)
+@click.option("--heartbeat-seconds", type=int, default=300, show_default=True)
+@click.option("--stale-after-hours", type=float, default=30.0, show_default=True)
+@click.option("--missing-after-days", type=float, default=2.0, show_default=True)
+@pass_files
+def start(
+  files: Files,
+  target_run: datetime.datetime,
+  repositories: dict[str, str],
+  heartbeat_seconds: int,
+  stale_after_hours: float,
+  missing_after_days: float,
+) -> None:
+  """A collection starts."""
+
+  def change(state: State | None) -> State:
+    previous = {entry.res: entry for entry in state.resolutions} if state else {}
+    resolutions = []
+    for res, path in repositories.items():
+      before = previous.get(res)
+      entry = Resolution(
+        res=res,
+        latest_run=before.latest_run if before else None,
+        runs=before.runs if before else None,
+        flags=before.flags if before else {},
+        waiting_since=before.waiting_since if before else None,
+      )
+      summarize(entry, path)
+      resolutions.append(entry)
+    return State(
+      state="running",
+      started_at=now(),
+      updated_at=now(),
+      heartbeat_seconds=heartbeat_seconds,
+      stale_after_hours=stale_after_hours,
+      missing_after_days=missing_after_days,
+      target_run=target_run.date(),
+      resolutions=resolutions,
+      repositories=repositories,
+    )
+
+  update(files, change)
+
+
+@status.command()
+@pass_files
+def beat(files: Files) -> None:
+  """The collection is still running."""
+
+  def change(state: State | None) -> State | None:
+    state = started(state, files)
+    # A late beat of an ended collection would make it look as if it were running again.
+    return state if state.state == "running" else None
+
+  update(files, change)
+
+
+@status.command("res")
+@click.argument("res")
+@click.argument("new_state", metavar="STATE", type=click.Choice(get_args(ResolutionState)))
+@pass_files
+def resolution(files: Files, res: str, new_state: ResolutionState) -> None:
+  """A resolution's download changes state."""
+
+  def change(state: State | None) -> State:
+    state = started(state, files)
+    entries = {entry.res: entry for entry in state.resolutions}
+    if res not in entries:
+      raise click.ClickException(f"unknown resolution {res!r}: not in this collection")
+    entry = entries[res]
+    entry.state = new_state
+    if new_state == "downloading":
+      entry.started_at = now()
+    elif new_state != "pending":
+      entry.ended_at = now()
+      # Waiting from the first collection in a row that ended with a run not published.
+      if new_state == "not_published":
+        entry.waiting_since = entry.waiting_since or now()
+      elif new_state == "finished":
+        entry.waiting_since = None
+      summarize(entry, state.repositories.get(res))
+    return state
+
+  update(files, change)
+
+
+@status.command()
+@click.argument("new_state", metavar="STATE", type=click.Choice(["finished", "aborted"]))
+@click.option("--detail", help="What the page shows next to the state.")
+@pass_files
+def end(files: Files, new_state: CollectionState, detail: str | None) -> None:
+  """The collection ends."""
+
+  def change(state: State | None) -> State:
+    state = started(state, files)
+    state.state = new_state
+    state.detail = detail
+    state.ended_at = now()
+    for entry in state.resolutions:
+      # A collection aborted while a resolution was downloading: that one failed.
+      if new_state == "aborted" and entry.state == "downloading":
+        entry.state = "failed"
+        entry.ended_at = now()
+    return state
+
+  update(files, change)
+
+
+def json_schema() -> str:
+  """The published document's JSON Schema."""
+  return json.dumps(Heartbeat.model_json_schema(by_alias=True, mode="serialization"), indent=2)

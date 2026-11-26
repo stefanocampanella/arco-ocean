@@ -6,8 +6,8 @@ import pathlib
 import re
 import tomllib
 
-ROOT = pathlib.Path(__file__).parents[1]
-SCRIPTS = ("download.sh", "climatology.sh", "forecast.sh")
+ROOT = pathlib.Path(__file__).parents[2]
+SCRIPTS = ("download.sh", "climatology.sh")
 IMAGE = "oras://ghcr.io/stefanocampanella/arco-make"
 
 
@@ -24,4 +24,4 @@ def test_the_default_image_is_the_pinned_version() -> None:
     text = (ROOT / "scripts" / script).read_text()
     (default,) = re.findall(r'^IMAGE="([^"]*)"$', text, flags=re.MULTILINE)
     assert default == expected, script
-    assert f"(default: {expected})" in text or script == "forecast.sh", script
+    assert f"(default: {expected})" in text, script

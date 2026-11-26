@@ -15,7 +15,7 @@ import re
 
 import pytest
 
-NOTES = pathlib.Path(__file__).parents[1] / "docs" / "coarsen-ocean-datasets.md"
+NOTES = pathlib.Path(__file__).parents[2] / "docs" / "coarsen-ocean-datasets.md"
 FENCE = re.compile(r"^```pycon( live)?\n(.*?)^```$", re.MULTILINE | re.DOTALL)
 FLAGS = doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE
 

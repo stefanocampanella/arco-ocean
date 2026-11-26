@@ -11,7 +11,7 @@ import time
 
 import pytest
 
-SCRIPTS = pathlib.Path(__file__).parents[1] / "scripts"
+SCRIPTS = pathlib.Path(__file__).parents[2] / "scripts"
 
 # Records its arguments; refuses, as arco-make does, a run while a failed one waits, unless
 # resumed.

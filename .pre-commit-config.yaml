@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stefano Campanella
 # SPDX-License-Identifier: MIT
 # Checks run before each commit (`uvx pre-commit install`) and in CI (.github/workflows/checks.yml).
-# The recipes are validated by the tests (tests/test_recipes.py), with the pinned arco-make.
+# The recipes are validated by the tests (tests/python/test_recipes.py), with the pinned arco-make.
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -10,16 +10,27 @@ repos:
       - id: check-yaml
       - id: check-merge-conflict
 
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.17.6
-    hooks:
-      - id: ruff-check
-      - id: ruff-format
-        args: [--check]
-
-  # The marimo notebooks: names defined once, cells that form a graph, Markdown as marimo writes it.
+  # ruff and ty of the project's environment (uv.lock), as CI runs them (ci.yml).
   - repo: local
     hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run --frozen ruff check --force-exclude
+        language: system
+        types: [python]
+      - id: ruff-format
+        name: ruff format
+        entry: uv run --frozen ruff format --check --force-exclude
+        language: system
+        types: [python]
+      - id: ty-check
+        name: ty check
+        entry: uv run --frozen ty check
+        language: system
+        types: [python]
+        pass_filenames: false
+      # The marimo notebooks: names defined once, cells that form a graph, Markdown as marimo
+      # writes it.
       - id: marimo-check
         name: marimo check
         entry: uvx marimo@0.25.2 check
