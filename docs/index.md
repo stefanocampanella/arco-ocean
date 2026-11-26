@@ -43,11 +43,12 @@ One Icechunk repository per product and resolution in the `s3://ogs-arco-ocean` 
 | Statistics | `statistics/res=<res>` | The climatology and the standard deviation of the anomalies over 1993–2023, by day of the year (groups `climatology` and `anomaly_std`). |
 | Forecast | `forecast/res=<res>` | The daily 00 UTC runs, 10 lead days, the last five years of runs: GLO12 and IFS HRES, on the historical dataset's grids and variables, with a flag per component. [Forecasts](forecasts.md) |
 
-## Historical download
+## Historical downloads
 
-The historical dataset at 0.25° is downloaded once, block after block (32 days each), into its
-repository; it is published when every block is stored. Its progress, read from the repository,
-is updated every five minutes while the download runs.
+The historical dataset is downloaded once at each resolution, block after block (32 days each),
+into its repository; each is published when every block is stored. Their progress, read from the
+repositories, is updated every five minutes while a download runs. The headline names the
+resolution that needs attention first: failed, then stale, then downloading.
 
 :::{anywidget} assets/js/status.js
 :css: assets/js/status.css

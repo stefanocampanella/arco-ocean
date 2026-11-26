@@ -94,9 +94,10 @@ The cards' styles (status.js), inside their shadow DOM: text colours are the pag
 .status-progress {
   display: block;
   width: 100%;
+  min-width: 6rem;
   height: 0.6rem;
-  margin: 0.5rem 0;
-  accent-color: var(--accent);
+  margin: 0.35rem 0 0;
+  accent-color: var(--downloading);
 }
 
 .status-times {

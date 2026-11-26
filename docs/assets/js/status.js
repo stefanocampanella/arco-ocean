@@ -5,19 +5,23 @@
 // two cards, chosen by the directive's JSON:
 // - {} or {"show": "forecast"}: the forecast collection, judged from its heartbeat (`arco-ocean
 //   status` writes it; `arco-ocean heartbeat-schema` prints the document's schema);
-// - {"show": "historical"}: the historical download, run once, judged from its progress
-//   (`arco-ocean progress`, through scripts/download.sh --status-url; `arco-ocean
-//   progress-schema`).
+// - {"show": "historical"}: the historical downloads, each resolution's run once, judged from
+//   their progresses (`arco-ocean progress`, through scripts/download.sh --status-url; `arco-ocean
+//   progress-schema`), one document per resolution.
 // One module: the directive copies this file alone, so it imports nothing. The judgements are
 // pure functions, tested by tests/js/*.test.js; the widget reads its document every minute.
-// `?status=URL` (the forecast's) and `?progress=URL` (the historical's) in the page's address read
-// other documents (a test copy, say). Nothing here runs on import: Node's tests import it without
+// `?status=URL` (the forecast's heartbeat) and `?progress=PREFIX` (where the historical
+// progresses are: PREFIX + "res=<res>.json") in the page's address read other documents (a test
+// copy, say). Nothing here runs on import: Node's tests import it without
 // a page.
 
 export const DEFAULT_STATUS_URL =
   "https://ogs-arco-ocean.s3.eu-south-1.amazonaws.com/status/forecast.json";
-export const DEFAULT_PROGRESS_URL =
-  "https://ogs-arco-ocean.s3.eu-south-1.amazonaws.com/status/historical.json";
+// The historical downloads' progresses: PREFIX + "res=<res>.json", one per resolution, as the
+// bucket's layout (scripts/download.sh --status-url s3://ogs-arco-ocean/status/historical/res=0p25.json).
+export const DEFAULT_PROGRESS_PREFIX =
+  "https://ogs-arco-ocean.s3.eu-south-1.amazonaws.com/status/historical/";
+export const HISTORICAL_RESOLUTIONS = ["0p25", "0p5", "1p0"];
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
@@ -229,16 +233,18 @@ export function period(progress) {
   return `${progress.start ?? "–"} to ${dayBefore(progress.end)}`;
 }
 
-// "12 %": rounded down, so that 100 % means every day.
+// "12 %": rounded down, so that 100 % means every day (an exact share, as 0.29, is not taken
+// down by its floating-point error).
 export function percent(share) {
-  return `${Math.floor(share * 100)} %`;
+  return `${Math.floor(share * 100 + 1e-9)} %`;
 }
 
-// "up to 1997-03-14 (12 %)", or "" if nothing is stored yet.
+// "up to 1997-03-13 (12 %)": the last day stored (the newest block ends the day after), or "" if
+// nothing is stored yet.
 function doneText(progress) {
   if (!progress.done_until) return "";
   const share = fraction(progress);
-  return `up to ${progress.done_until}${share === null ? "" : ` (${percent(share)})`}`;
+  return `up to ${dayBefore(progress.done_until)}${share === null ? "" : ` (${percent(share)})`}`;
 }
 
 // The download's state as the page shows it: downloading, finished, failed (status "aborted"),
@@ -305,6 +311,46 @@ export function assessProgress(progress, now = Date.now()) {
   };
 }
 
+// The headline's state among the resolutions: the most worrying first.
+const SEVERITY = ["aborted", "stale", "unknown", "downloading", "finished"];
+
+// The historical downloads' state as the card's headline shows it, from each resolution's
+// progress (`entries`: {res, progress}, progress null where none could be read: not started,
+// or the bucket out of reach): the most worrying resolution's verdict, named, and the resolutions
+// not started; finished when every one published is.
+export function assessDownloads(entries, now = Date.now()) {
+  const judged = (entries ?? [])
+    .filter((entry) => entry.progress)
+    .map((entry) => ({ res: entry.res, verdict: assessProgress(entry.progress, now) }));
+  const missing = (entries ?? []).filter((entry) => !entry.progress);
+  if (judged.length === 0) {
+    return {
+      status: "unknown",
+      label: "Unknown",
+      detail:
+        "No historical download has published its progress yet, or the bucket cannot be " +
+        "reached.",
+    };
+  }
+  const rank = (entry) => SEVERITY.indexOf(entry.verdict.status);
+  const worst = judged.reduce((a, b) => (rank(b) < rank(a) ? b : a));
+  const notStarted = missing.length
+    ? ` Not started: ${missing.map((entry) => resolutionLabel(entry.res)).join(", ")}.`
+    : "";
+  if (worst.verdict.status === "finished") {
+    const names = judged.map((entry) => resolutionLabel(entry.res)).join(", ");
+    return {
+      status: "finished",
+      label: "Finished",
+      detail: `${names}: every day stored.${notStarted}`,
+    };
+  }
+  return {
+    ...worst.verdict,
+    detail: `${resolutionLabel(worst.res)}: ${worst.verdict.detail}${notStarted}`,
+  };
+}
+
 // --- The dashboard -------------------------------------------------------------------------------
 
 const REFRESH_MS = 60 * 1000;
@@ -343,15 +389,15 @@ const PROGRESS_MARKUP = `
       <span class="status-label">Checking…</span>
     </div>
     <p class="status-detail">Reading the progress.</p>
-    <progress class="status-progress" max="1" aria-label="Share of the period stored"></progress>
-    <dl class="status-times">
-      <div><dt>Period</dt><dd data-field="period">–</dd></div>
-      <div><dt>Stored up to</dt><dd data-field="done">–</dd></div>
-      <div><dt>Last block committed</dt><dd data-field="commit">–</dd></div>
-      <div><dt>Started</dt><dd data-field="started">–</dd></div>
-      <div><dt>Last update</dt><dd data-field="updated">–</dd></div>
-      <div><dt>Ended</dt><dd data-field="ended">–</dd></div>
-    </dl>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <caption>Each resolution's download</caption>
+      <thead>
+        <tr><th scope="col">Resolution</th><th scope="col">State</th><th scope="col">Period</th><th scope="col">Last day stored</th><th scope="col">Last block committed</th><th scope="col">Last update</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
   </div>
   <p class="note">Checked at <span data-field="checked">–</span>; checked again every minute.</p>
 `;
@@ -362,7 +408,7 @@ function ago(iso, now) {
   return Number.isNaN(time) ? "–" : `${utc(iso)} (${duration(now - time)} ago)`;
 }
 
-async function fetchHeartbeat(url) {
+async function fetchDocument(url) {
   try {
     const answer = await fetch(url, { cache: "no-store" });
     if (!answer.ok) return null;
@@ -413,9 +459,9 @@ export function show(el, heartbeat, now) {
   field("checked").textContent = utc(new Date(now).toISOString());
 }
 
-// Set a field's text, each date in it kept on one line (a line may break at a hyphen).
+// Set an element's text, each date in it kept on one line (a line may break at a hyphen).
 function setDates(element, text) {
-  element.replaceChildren(
+  element.append(
     ...text.split(/(\d{4}-\d{2}-\d{2})/).map((piece, i) => {
       if (i % 2 === 0) return piece;
       const date = document.createElement("span");
@@ -426,37 +472,61 @@ function setDates(element, text) {
   );
 }
 
-// Show the download's progress in the widget's element, as judged at `now`.
-export function showProgress(el, progress, now) {
-  const verdict = assessProgress(progress, now);
-  const field = (name) => el.querySelector(`[data-field="${name}"]`);
+function dateCell(row, text) {
+  const td = cell(row, "");
+  setDates(td, text);
+  return td;
+}
+
+// The documents of the historical downloads at each resolution (none read: every one null).
+function noProgress() {
+  return HISTORICAL_RESOLUTIONS.map((res) => ({ res, progress: null }));
+}
+
+// Show the historical downloads' progresses (`entries`: {res, progress}) in the widget's
+// element, as judged at `now`.
+export function showProgress(el, entries, now) {
+  const all = entries ?? noProgress();
+  const verdict = assessDownloads(all, now);
   el.querySelector(".status-card").dataset.status = verdict.status;
   el.querySelector(".status-icon").textContent = ICONS[verdict.status];
   el.querySelector(".status-label").textContent = verdict.label;
   el.querySelector(".status-detail").textContent = verdict.detail;
 
-  const ok = progress && progress.schema === 1;
-  const bar = el.querySelector(".status-progress");
-  const share = ok ? fraction(progress) : null;
-  // No value: an indeterminate bar (nothing stored yet, or unknown).
-  if (share === null) {
-    bar.removeAttribute("value");
-  } else {
-    bar.value = share;
+  const body = el.querySelector("tbody");
+  body.replaceChildren();
+  for (const { res, progress } of all) {
+    const row = document.createElement("tr");
+    cell(row, resolutionLabel(res));
+    const ok = progress && progress.schema === 1;
+    if (!progress) {
+      cell(row, "Not started").dataset.state = "pending";
+    } else {
+      const own = assessProgress(progress, now);
+      cell(row, own.label).dataset.state = own.status;
+    }
+    dateCell(row, ok ? period(progress) : "–");
+    const share = ok ? fraction(progress) : null;
+    const stored = dateCell(
+      row,
+      ok && progress.done_until
+        ? `${dayBefore(progress.done_until)}${share === null ? "" : ` (${percent(share)})`}`
+        : "–",
+    );
+    if (share !== null) {
+      const bar = document.createElement("progress");
+      bar.className = "status-progress";
+      bar.max = 1;
+      bar.value = share;
+      bar.textContent = percent(share);
+      bar.setAttribute("aria-label", `Share of the period stored at ${resolutionLabel(res)}`);
+      stored.append(bar);
+    }
+    dateCell(row, ok ? ago(progress.last_commit_at, now) : "–");
+    dateCell(row, ok ? ago(progress.updated_at, now) : "–");
+    body.append(row);
   }
-  bar.textContent = share === null ? "" : percent(share);
-  setDates(field("period"), ok ? period(progress) : "–");
-  setDates(
-    field("done"),
-    ok && progress.done_until
-      ? `${progress.done_until}${share === null ? "" : ` (${percent(share)})`}`
-      : "–",
-  );
-  setDates(field("commit"), ok ? ago(progress.last_commit_at, now) : "–");
-  setDates(field("started"), ok ? utc(progress.started_at) : "–");
-  setDates(field("updated"), ok ? ago(progress.updated_at, now) : "–");
-  setDates(field("ended"), ok && progress.ended_at ? utc(progress.ended_at) : "–");
-  field("checked").textContent = utc(new Date(now).toISOString());
+  el.querySelector('[data-field="checked"]').textContent = utc(new Date(now).toISOString());
 }
 
 // The heartbeat's URL: the page's ?status=, else the bucket's (written once, here).
@@ -464,20 +534,38 @@ export function statusUrl(search) {
   return new URLSearchParams(search).get("status") || DEFAULT_STATUS_URL;
 }
 
-// The progress's URL: the page's ?progress=, else the bucket's.
-export function progressUrl(search) {
-  return new URLSearchParams(search).get("progress") || DEFAULT_PROGRESS_URL;
+// The progresses' URLs, one per resolution: the page's ?progress= prefix, else the bucket's.
+export function progressUrls(search) {
+  const prefix = new URLSearchParams(search).get("progress") || DEFAULT_PROGRESS_PREFIX;
+  return HISTORICAL_RESOLUTIONS.map((res) => ({ res, url: `${prefix}res=${res}.json` }));
 }
 
-// The cards, by the directive's "show".
+// The cards, by the directive's "show": what each reads (`load`, from the page's address) and
+// how it shows it (`show`, also given null when the reading cannot be shown).
 export const CARDS = {
-  forecast: { markup: MARKUP, url: statusUrl, show },
-  historical: { markup: PROGRESS_MARKUP, url: progressUrl, show: showProgress },
+  forecast: {
+    markup: MARKUP,
+    load: (search) => fetchDocument(statusUrl(search)),
+    show,
+  },
+  historical: {
+    markup: PROGRESS_MARKUP,
+    load: (search) =>
+      Promise.all(
+        progressUrls(search).map(async ({ res, url }) => ({
+          res,
+          progress: await fetchDocument(url),
+        })),
+      ),
+    show: showProgress,
+  },
 };
 
-// The card a widget shows: its model's "show" (the directive's JSON), the forecast's by default.
+// The card a widget shows: its model's "show" (the directive's JSON), the forecast's by default;
+// null for a name that is not a card's (not even an object's own property, as "toString").
 export function card(name) {
-  return CARDS[name ?? "forecast"] ?? null;
+  const key = name ?? "forecast";
+  return Object.hasOwn(CARDS, key) ? CARDS[key] : null;
 }
 
 function render({ model, el }) {
@@ -491,16 +579,15 @@ function render({ model, el }) {
   const root = document.createElement("div");
   root.innerHTML = chosen.markup;
   el.append(root);
-  const url = chosen.url(window.location.search);
   // Only the newest refresh shows: a slow answer does not overwrite a later one.
   let latest = 0;
   let stopped = false;
   const refresh = async () => {
     const mine = ++latest;
-    const heartbeat = await fetchHeartbeat(url);
+    const data = await chosen.load(window.location.search);
     if (stopped || mine !== latest) return;
     try {
-      chosen.show(root, heartbeat, Date.now());
+      chosen.show(root, data, Date.now());
     } catch (error) {
       // A document it cannot show: said so, not left at "Checking…".
       chosen.show(root, null, Date.now());
