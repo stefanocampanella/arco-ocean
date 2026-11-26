@@ -50,8 +50,7 @@ download() {
 @test "a download that fails says so, and how to continue" {
     FAKE_BLOCKS="--running 1993-01-01/1993-02-02" FAKE_CODE=1 download
     assert_failure 1
-    assert_equal "$(published 'd["state"], d["done_until"], d["blocks"]')" \
-        "('failed', '1993-02-02', 1)"
+    assert_equal "$(published 'd["state"], d["done_until"]')" "('failed', '1993-02-02')"
     assert_equal "$(published '"exit status 1" in d["detail"] and "--resume" in d["detail"]')" True
 }
 
@@ -70,8 +69,7 @@ download() {
         fi
         sleep 0.2
     done
-    assert_equal "$(published 'd["state"], d["done_until"], d["blocks"]')" \
-        "('running', '1993-02-02', 1)"
+    assert_equal "$(published 'd["state"], d["done_until"]')" "('running', '1993-02-02')"
     assert_equal "$(published 'd["last_commit_at"] is not None')" True
 
     kill -TERM -- "-${pid}"
@@ -84,6 +82,42 @@ download() {
     ended="$(cat "${PUBLISHED}")"
     sleep 2.5
     assert_equal "$(cat "${PUBLISHED}")" "${ended}"
+}
+
+@test "a download killed outright stops beating" {
+    # Only the script, with SIGKILL: no EXIT trap runs; its beat loop must not go on (the page
+    # would show it downloading for ever).
+    FAKE_SLEEP=30 setsid bash "${REPO}/scripts/download.sh" --project-dir "${PROJECT}" \
+        --virtual-env "${PROJECT}/venv" --env-file "" --status-url "${PUBLISHED}" --heartbeat 1 \
+        --start 1993-01-01 --end 1993-06-01 --attempts 1 historical_res-1p0 \
+        > "${BATS_TEST_TMPDIR}/output" 2>&1 3>&- &
+    local pid=$!
+    for _ in $(seq 300); do
+        [[ -f "${PUBLISHED}" ]] && break
+        sleep 0.2
+    done
+    assert_file_exists "${PUBLISHED}"
+    # A first beat: the loop runs.
+    local started
+    started="$(published 'd["updated_at"]')"
+    for _ in $(seq 150); do
+        [[ "$(published 'd["updated_at"]')" != "${started}" ]] && break
+        sleep 0.2
+    done
+    assert_not_equal "$(published 'd["updated_at"]')" "${started}"
+    kill -KILL "${pid}"
+    wait "${pid}" || true
+    # The loop notices within a beat; a beat already under way (each takes seconds: it starts
+    # arco-ocean) may still land.
+    sleep 5
+    local last
+    last="$(cat "${PUBLISHED}")"
+    # Without the check, a beat at least every few seconds.
+    sleep 8
+    # The stand-in and its sleep are left: stop them with the process group.
+    kill -TERM -- "-${pid}" 2>/dev/null || true
+    assert_equal "$(cat "${PUBLISHED}")" "${last}"
+    assert_equal "$(published 'd["state"]')" running
 }
 
 @test "an extension starts where the output ends" {

@@ -202,13 +202,13 @@ arco_ocean_command() {
     fi
 }
 
-# A GitHub repository's OWNER/REPO, else exit naming the option. Usage: github_repo OPTION VALUE.
 # heartbeat_start SECONDS COMMAND...: run COMMAND every SECONDS in the background, until
-# heartbeat_stop (HEARTBEAT_PID). Stopped, the loop stops its sleep too (else left behind with the
-# script's output open). It closes descriptor 9, where the scripts hold their locks, so that a
-# loop left running never holds one.
+# heartbeat_stop (HEARTBEAT_PID), or until the script that started it is gone (killed outright,
+# its EXIT trap not run: the heartbeat then stops, and the page calls it stale). Stopped, the loop
+# stops its sleep too (else left behind with the script's output open). It closes descriptor 9,
+# where the scripts hold their locks, so that a loop left running never holds one.
 heartbeat_start() {
-    local every=$1
+    local every=$1 script=$$
     shift
     (
         exec 9>&-
@@ -218,6 +218,7 @@ heartbeat_start() {
             sleep "${every}" &
             SLEEP_PID=$!
             wait "${SLEEP_PID}"
+            kill -0 "${script}" 2>/dev/null || exit 0
             "$@"
         done
     ) &
@@ -232,6 +233,7 @@ heartbeat_stop() {
     fi
 }
 
+# A GitHub repository's OWNER/REPO, else exit naming the option. Usage: github_repo OPTION VALUE.
 github_repo() {
     [[ "$2" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die "$1 takes OWNER/REPO (got '$2')."
 }

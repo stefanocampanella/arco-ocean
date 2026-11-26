@@ -5,20 +5,28 @@ once (the historical dataset's), as the forecast collection's heartbeat is for d
 
 `scripts/download.sh --status-url URL` runs `arco-ocean progress` when the download starts, every
 few minutes while it runs (a beat), and when it ends. Each call reads the progress from the
-repository itself: arco-make commits each block of a download on the run's branch, the block's
-interval in the commit's metadata (`arcomake_block`), and moves `main` to the run's last commit
-when the run is complete. The newest block committed tells how far the download is, its commit
-when. A download killed without notice stops beating: the page calls it stale.
+repository itself, as arco-make records it: each block of a download is a commit on the run's
+branch (`run/<label>`, each commit's `arcomake_run` the label), the block's interval in the
+commit's metadata (`arcomake_block`), and `main` moves to the run's last commit when the run is
+complete. The newest block committed tells how far the download is, its commit when. A download
+killed without notice stops beating: the page calls it stale.
+
+Which run is this download's: one whose branch started from `main` as it was when the download
+started (recorded then), a run resumed included; a branch of an earlier run that `main` has moved
+past since is not. Before its first block, nothing is stored by the download, unless it extends
+the repository (then what `main` holds counts); a download that replaces an output does not show
+the old one's end. Once the run's branch is known, a beat reads only its tip.
 
 The document is `Progress` (`arco-ocean progress-schema` prints its JSON Schema); the state
-file, `ProgressState`, also holds the repository's path or URL, which is not published.
+file, `ProgressState`, also holds the repository's path or URL and what identifies the run, which
+are not published.
 """
 
+import dataclasses
 import datetime
 import json
 import pathlib
-from collections.abc import Callable
-from typing import Literal, get_args
+from typing import Any, Literal, get_args
 
 import click
 from pydantic import BaseModel, Field
@@ -27,28 +35,16 @@ from arco_ocean.status import (
   MODEL_CONFIG,
   Files,
   Time,
-  apply_settings,
   load_model,
-  locked,
   now,
   pass_files,
-  publish,
-  write_atomically,
+  require_started,
+  update_state,
 )
 
 DownloadState = Literal["running", "finished", "failed"]
 # The commands of arco-make's download runs (their branches: run/<command>-<time>).
 COMMANDS = ("download", "download-extend")
-
-
-class Reading(BaseModel):
-  """What the repository tells of a download: the end of the newest block committed (on the
-  run's branch while it runs, on `main` once it is complete), the blocks the run committed, and
-  when the newest was."""
-
-  done_until: datetime.date | None = None
-  blocks: int = 0
-  last_commit_at: Time | None = None
 
 
 class Progress(BaseModel):
@@ -66,19 +62,24 @@ class Progress(BaseModel):
   heartbeat_seconds: int
   start: datetime.date | None = Field(description="The first day downloaded (unknown: none)")
   end: datetime.date = Field(description="The day after the last")
-  done_until: datetime.date | None = Field(description="The end of the newest block committed")
-  blocks: int = Field(description="The blocks this download committed")
+  done_until: datetime.date | None = Field(description="The end of the newest block stored")
   last_commit_at: Time | None = Field(description="When the newest block was committed")
   error: str | None = Field(None, description="Why the repository could not be read")
 
 
+PRIVATE = {"repository", "base", "extension", "branch"}
+
+
 class ProgressState(Progress):
-  """The state file: the document, and where the repository is."""
+  """The state file: the document, where the repository is, and what identifies the run."""
 
   repository: str
+  base: str | None = Field(description="main's tip when the download started (no repository: none)")
+  extension: bool = Field(description="Whether the download extends the repository")
+  branch: str | None = Field(None, description="The run's branch, once found")
 
   def public(self) -> str:
-    shown = self.model_dump(mode="json", by_alias=True, exclude={"repository"})
+    shown = self.model_dump(mode="json", by_alias=True, exclude=PRIVATE)
     return json.dumps(shown, indent=2) + "\n"
 
 
@@ -87,70 +88,107 @@ def block_end(key: object) -> datetime.date | None:
   # The module: `arcomake.download` is also the name of its click command.
   from arcomake.download import block_end as arcomake_block_end
 
-  end = arcomake_block_end(str(key))
+  end = arcomake_block_end(str(key)) if key is not None else None
   return None if end is None else end.date()
 
 
-def read_progress(path: str) -> Reading:
-  """The download's progress in the repository at `path` (local or s3://)."""
+@dataclasses.dataclass(frozen=True)
+class Reading:
+  """What the repository tells of a download: the end of the newest block it stored, when that
+  was committed, and the run's branch, if found."""
+
+  done_until: datetime.date | None = None
+  last_commit_at: datetime.datetime | None = None
+  branch: str | None = None
+
+
+def tip(repo: Any, branch: str) -> Any:
+  """The commit a branch points to (its snapshot's information)."""
+  return next(iter(repo.ancestry(branch=branch)))
+
+
+def stored(snapshot: Any) -> Reading:
+  """The block a commit records, if any."""
+  from arcomake import icechunk_utils
+
+  end = block_end((snapshot.metadata or {}).get(icechunk_utils.BLOCK_KEY))
+  return Reading(end, snapshot.written_at) if end is not None else Reading()
+
+
+@dataclasses.dataclass(frozen=True)
+class Main:
+  """`main` when a download starts: its tip (none without a repository) and its block."""
+
+  base: str | None = None
+  stored: Reading = Reading()
+
+
+def read_main(path: str) -> Main:
+  from arcomake import icechunk_utils
+
+  repo = icechunk_utils.existing_repository(path)
+  if repo is None:
+    return Main()
+  snapshot = tip(repo, icechunk_utils.BRANCH)
+  return Main(str(snapshot.id), stored(snapshot))
+
+
+def read_progress(
+  path: str, *, base: str | None, extension: bool, branch: str | None, finished: bool = False
+) -> Reading:
+  """The progress of the download that started with `main` at `base`, in the repository at
+  `path` (local or s3://); `branch`, its run's branch if already found. `finished`: the run is
+  complete, `main` holds it."""
   from arcomake import icechunk_utils
 
   repo = icechunk_utils.existing_repository(path)
   if repo is None:
     return Reading()
-  run = icechunk_utils.waiting_run(repo, *COMMANDS)
-  if run is not None and run.blocks:
-    tip = next(iter(repo.ancestry(branch=run.branch)))
-    return Reading(
-      done_until=block_end(run.blocks[-1]), blocks=len(run.blocks), last_commit_at=tip.written_at
-    )
-  # No run's branch with blocks: the run is complete (`main` at its last block), or has not
-  # committed one yet.
-  tip = next(iter(repo.ancestry(branch=icechunk_utils.BRANCH)))
-  key = (tip.metadata or {}).get(icechunk_utils.BLOCK_KEY)
-  if key is None:
-    return Reading()
-  return Reading(done_until=block_end(key), last_commit_at=tip.written_at)
+  if branch is None and not finished:
+    run = icechunk_utils.waiting_run(repo, *COMMANDS)
+    if run is not None and run.current and (base is None or run.base == base):
+      branch = run.branch
+  if branch is not None and not finished and branch in repo.list_branches():
+    snapshot = tip(repo, branch)
+    # The run's own commit: a branch without one yet points to `main`'s.
+    label = branch.removeprefix("run/")
+    if (snapshot.metadata or {}).get(icechunk_utils.RUN_KEY) == label:
+      reading = stored(snapshot)
+      if reading.done_until is not None:
+        return dataclasses.replace(reading, branch=branch)
+  snapshot = tip(repo, icechunk_utils.BRANCH)
+  # `main` counts once the run moved it (or the run is complete), or for an extension.
+  if finished or extension or str(snapshot.id) != base:
+    return dataclasses.replace(stored(snapshot), branch=branch)
+  return Reading(branch=branch)
 
 
-def refresh(state: ProgressState) -> None:
-  """Read the progress again into `state`; a failure is recorded, not raised: the heartbeat never
+def failure(error: Exception) -> str:
+  return f"the repository could not be read: {type(error).__name__}"
+
+
+def refresh(state: ProgressState, finished: bool = False) -> None:
+  """Read the progress again into `state`; a failure is recorded, not raised: the progress never
   stops a download."""
   try:
-    reading = read_progress(state.repository)
+    reading = read_progress(
+      state.repository,
+      base=state.base,
+      extension=state.extension,
+      branch=state.branch,
+      finished=finished,
+    )
   except Exception as error:  # noqa: BLE001 (reported in the document)
-    state.error = f"the repository could not be read: {type(error).__name__}"
+    state.error = failure(error)
     return
   state.done_until = reading.done_until
   state.last_commit_at = reading.last_commit_at
-  # The blocks of this run: a finished run's are counted while it ran (its branch is gone).
-  state.blocks = reading.blocks or state.blocks
+  state.branch = reading.branch
   state.error = None
 
 
-def update(
-  files: Files,
-  change: Callable[[ProgressState | None], ProgressState | None],
-  fresh: bool = False,
-) -> None:
-  """Apply `change` to the state file, under its lock, then publish the document. `fresh`: a
-  download starts, and replaces a state file that is not one (`status.load_model`)."""
-  # Before any read: the repository may be in the bucket.
-  apply_settings()
-  with locked(files.state_file):
-    state = change(load_model(ProgressState, files.state_file, fresh))
-    if state is None:
-      return
-    state.updated_at = now()
-    write_atomically(files.state_file, state.model_dump_json(indent=2, by_alias=True) + "\n")
-    if files.publish is not None:
-      publish(files.publish, state.public())
-
-
-def started(state: ProgressState | None, files: Files) -> ProgressState:
-  if state is None:
-    raise click.ClickException(f"no download started: {files.state_file} is missing")
-  return state
+def load(state_file: pathlib.Path, fresh: bool) -> ProgressState | None:
+  return load_model(ProgressState, state_file, fresh)
 
 
 @click.group()
@@ -182,28 +220,35 @@ def start(
   heartbeat_seconds: int,
 ) -> None:
   """A download starts. Without --start (an extension), the first day is where the repository
-  ends now."""
+  ends now (`main`, also when the extension resumes a failed one)."""
 
   def change(_: ProgressState | None) -> ProgressState:
+    error = None
+    try:
+      main = read_main(repository)
+    except Exception as caught:  # noqa: BLE001 (reported in the document)
+      main, error = Main(), failure(caught)
     state = ProgressState(
       name=name,
       state="running",
       started_at=now(),
       updated_at=now(),
       heartbeat_seconds=heartbeat_seconds,
-      start=start.date() if start else None,
+      start=start.date() if start else main.stored.done_until,
       end=end.date(),
       done_until=None,
-      blocks=0,
       last_commit_at=None,
       repository=repository,
+      base=main.base,
+      extension=start is None,
     )
-    refresh(state)
-    if state.start is None:
-      state.start = state.done_until
+    if error is None:
+      refresh(state)
+    else:
+      state.error = error
     return state
 
-  update(files, change, fresh=True)
+  update_state(files, load, change, fresh=True)
 
 
 @progress.command()
@@ -212,14 +257,14 @@ def beat(files: Files) -> None:
   """The download is still running."""
 
   def change(state: ProgressState | None) -> ProgressState | None:
-    state = started(state, files)
+    state = require_started(state, files, "download")
     # A late beat of an ended download would make it look as if it were running again.
     if state.state != "running":
       return None
     refresh(state)
     return state
 
-  update(files, change)
+  update_state(files, load, change, fresh=False)
 
 
 @progress.command()
@@ -234,14 +279,14 @@ def end(files: Files, new_state: DownloadState, detail: str | None) -> None:
   """The download ends."""
 
   def change(state: ProgressState | None) -> ProgressState:
-    state = started(state, files)
-    refresh(state)
+    state = require_started(state, files, "download")
+    refresh(state, finished=new_state == "finished")
     state.state = new_state
     state.detail = detail
     state.ended_at = now()
     return state
 
-  update(files, change)
+  update_state(files, load, change, fresh=False)
 
 
 def json_schema() -> str:

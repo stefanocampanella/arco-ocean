@@ -31,7 +31,7 @@ import os
 import pathlib
 import tempfile
 from collections.abc import Callable, Generator
-from typing import Annotated, Literal, get_args
+from typing import Annotated, Literal, Protocol, get_args
 
 import click
 from pydantic import (
@@ -255,15 +255,29 @@ class Files:
 pass_files = click.make_pass_decorator(Files)
 
 
-def update(
-  files: Files, change: Callable[[State | None], State | None], fresh: bool = False
+class StateFile(Protocol):
+  """A state file's model (`State`, `progress.ProgressState`): the published document, and what
+  stays private."""
+
+  updated_at: datetime.datetime
+
+  def public(self) -> str: ...
+
+  def model_dump_json(self, *, indent: int | None = None, by_alias: bool | None = None) -> str: ...
+
+
+def update_state[S: StateFile](
+  files: Files,
+  load_state: Callable[[pathlib.Path, bool], S | None],
+  change: Callable[[S | None], S | None],
+  fresh: bool,
 ) -> None:
-  """Apply `change` to the state file, under its lock, then publish the document. A change that
-  returns None leaves both as they are. `fresh`: see `load`."""
+  """Apply `change` to the state file (read by `load_state`), under its lock, then publish the
+  document. A change that returns None leaves both as they are. `fresh`: see `load_model`."""
   # Before any read: the repositories may be in the bucket (DATA_ROOT, scripts/lib/common.sh).
   apply_settings()
   with locked(files.state_file):
-    state = change(load(files.state_file, fresh))
+    state = change(load_state(files.state_file, fresh))
     if state is None:
       return
     state.updated_at = now()
@@ -272,10 +286,22 @@ def update(
       publish(files.publish, state.public())
 
 
-def started(state: State | None, files: Files) -> State:
+def require_started[S](state: S | None, files: Files, what: str) -> S:
+  """The state, or an error if `what` (a collection, a download) has not started."""
   if state is None:
-    raise click.ClickException(f"no collection started: {files.state_file} is missing")
+    raise click.ClickException(f"no {what} started: {files.state_file} is missing")
   return state
+
+
+def update(
+  files: Files, change: Callable[[State | None], State | None], fresh: bool = False
+) -> None:
+  """`update_state` of the forecast collection's state."""
+  update_state(files, load, change, fresh)
+
+
+def started(state: State | None, files: Files) -> State:
+  return require_started(state, files, "collection")
 
 
 def repository_option(

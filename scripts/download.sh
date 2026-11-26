@@ -66,7 +66,7 @@ $(common_usage download)
         $0 --start 1993-01-01 --end 2026-07-01 historical_res-0p25
         $0 --extend --end 2026-08-01 historical_res-0p25
         $0 --start 1993-01-01 --end 2026-07-01 \\
-            --status-url s3://BUCKET/status/historical.json historical_res-0p25
+            --status-url s3://BUCKET/status/historical/res=0p25.json historical_res-0p25
 EOF
 }
 
@@ -174,11 +174,12 @@ if [[ -n "${STATUS_URL}" ]]; then
     if [[ "${EXTEND}" == false ]]; then
         PROGRESS_START=(--start "${START_DATE}")
     fi
-    progress start --name "${NAME}" --repo "${OUTPUT}" --end "${END_DATE}" \
-        --heartbeat-seconds "${HEARTBEAT}" "${PROGRESS_START[@]+"${PROGRESS_START[@]}"}"
+    # Before the start: a download stopped while it starts ends its progress too.
     trap on_exit EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM
+    progress start --name "${NAME}" --repo "${OUTPUT}" --end "${END_DATE}" \
+        --heartbeat-seconds "${HEARTBEAT}" "${PROGRESS_START[@]+"${PROGRESS_START[@]}"}"
     heartbeat_start "${HEARTBEAT}" progress beat
 fi
 
