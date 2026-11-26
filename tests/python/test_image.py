@@ -7,7 +7,6 @@ import re
 import tomllib
 
 ROOT = pathlib.Path(__file__).parents[2]
-SCRIPTS = ("download.sh", "climatology.sh")
 IMAGE = "oras://ghcr.io/stefanocampanella/arco-make"
 
 
@@ -18,10 +17,12 @@ def pinned_version() -> str:
 
 
 def test_the_default_image_is_the_pinned_version() -> None:
-  """A version's image, not `latest`, which every merge on arco-make's master replaces."""
+  """A version's image, not `latest`, which every merge on arco-make's master replaces. The
+  scripts take it from scripts/lib/common.sh, and their help shows it from there."""
   expected = f"{IMAGE}:v{pinned_version()}"
-  for script in SCRIPTS:
-    text = (ROOT / "scripts" / script).read_text()
-    (default,) = re.findall(r'^IMAGE="([^"]*)"$', text, flags=re.MULTILINE)
-    assert default == expected, script
-    assert f"(default: {expected})" in text, script
+  text = (ROOT / "scripts" / "lib" / "common.sh").read_text()
+  (default,) = re.findall(r'^DEFAULT_IMAGE="([^"]*)"$', text, flags=re.MULTILINE)
+  assert default == expected
+  # No script keeps an image of its own.
+  for script in (ROOT / "scripts").glob("*.sh"):
+    assert IMAGE not in script.read_text(), script.name

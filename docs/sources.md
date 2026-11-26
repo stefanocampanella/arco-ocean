@@ -70,7 +70,7 @@ From ERA5's documentation and its known issues ([ERA5: data documentation](https
 
 ## GloFAS, the river discharge
 
-Not in version 2 (README, Rivers). The notes on GloFAS v5.0 and its forecasts are at the tag
+Not in version 2 ([Data, Rivers](data.md)). The notes on GloFAS v5.0 and its forecasts are at the tag
 `rivers-last`.
 
 ## How the sources fit together
@@ -88,6 +88,6 @@ system:
    in the boundary currents.
 3. **The forecasts are other systems.** GLO12 (the operational analysis and forecast) and IFS
    HRES are not the reanalyses' systems. They differ in model version,
-   resolution and assimilated data, and GLO12 has its own bathymetry and mask (README,
-   Forecasts). A model trained on the historical dataset meets a shift when it reads the
+   resolution and assimilated data, and GLO12 has its own bathymetry and mask
+   ([Forecasts](forecasts.md)). A model trained on the historical dataset meets a shift when it reads the
    forecasts.

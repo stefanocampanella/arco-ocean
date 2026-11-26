@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "kind": "download",
+  "name": "historical_res-0p25",
+  "state": "running",
+  "detail": null,
+  "started_at": "2026-11-20T09:00:00Z",
+  "updated_at": "2026-11-24T12:28:00Z",
+  "ended_at": null,
+  "heartbeat_seconds": 300,
+  "start": "1993-01-01",
+  "end": "2026-07-01",
+  "done_until": "1997-03-14",
+  "last_commit_at": "2026-11-24T12:20:00Z",
+  "error": null
+}

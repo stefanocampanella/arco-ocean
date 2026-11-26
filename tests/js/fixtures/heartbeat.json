@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "state": "running",
+  "detail": null,
+  "started_at": "2026-11-24T12:00:00Z",
+  "updated_at": "2026-11-24T12:28:00Z",
+  "ended_at": null,
+  "heartbeat_seconds": 300,
+  "stale_after_hours": 30.0,
+  "missing_after_days": 2.0,
+  "target_run": "2026-11-24",
+  "resolutions": [
+    {
+      "res": "0p25",
+      "state": "finished",
+      "started_at": "2026-11-24T12:00:01Z",
+      "ended_at": "2026-11-24T12:20:00Z",
+      "latest_run": "2026-11-24",
+      "runs": 147,
+      "flags": {},
+      "waiting_since": null,
+      "error": null
+    },
+    {
+      "res": "0p5",
+      "state": "downloading",
+      "started_at": "2026-11-24T12:20:01Z",
+      "ended_at": null,
+      "latest_run": "2026-11-23",
+      "runs": 146,
+      "flags": {},
+      "waiting_since": null,
+      "error": null
+    },
+    {
+      "res": "1p0",
+      "state": "pending",
+      "started_at": null,
+      "ended_at": null,
+      "latest_run": "2026-11-23",
+      "runs": 146,
+      "flags": {},
+      "waiting_since": null,
+      "error": null
+    }
+  ]
+}

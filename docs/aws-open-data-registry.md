@@ -83,7 +83,7 @@ Resources:
 DataAtWork:
   Tutorials:
     - Title: Computing the Oceanic El Nino Index (ONI) with Xarray and ARCO-OCEAN
-      URL: https://github.com/stefanocampanella/arco-ocean/blob/main/tutorials/oni.py
+      URL: https://github.com/stefanocampanella/arco-ocean/blob/main/notebooks/oni.py
       AuthorName: OGS
       AuthorURL: https://github.com/inogs/
   Tools & Applications:

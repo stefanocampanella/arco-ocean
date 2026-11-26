@@ -287,7 +287,7 @@ NOW = datetime.datetime(2026, 11, 24, 13, 0, tzinfo=datetime.UTC)
 
 def finished(latest: str | None, **fields) -> status.Heartbeat:
   """A collection that finished at 12:20 on 24 Nov 2026, 0.25° with its newest run `latest`
-  (the same cases as the page's tests, tests of site/status.js)."""
+  (the same cases as the page's tests, tests/js/forecast.test.js)."""
   document = {
     "schema": 1,
     "state": "finished",

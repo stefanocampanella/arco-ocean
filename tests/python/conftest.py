@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 """Tests marked `live` read the real sources: skipped unless pytest is given `--live`. Every other
 test runs without arco-make's settings file, which holds credentials, and without the scripts'
-settings file (scripts/settings.sh), which would send their outputs elsewhere."""
+settings file (scripts/lib/common.sh), which would send their outputs elsewhere."""
 
 import pytest
 

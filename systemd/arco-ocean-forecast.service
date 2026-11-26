@@ -7,7 +7,7 @@
 # (WorkingDirectory) and the options of forecast.sh (FORECAST_OPTIONS: --bind, --data-root,
 # --image or --virtual-env, --env-file, ...). Its environment is systemd's, not the shell's:
 # arco-make's settings and credentials come from ~/.arcomakerc, where outputs go (DATA_ROOT) from
-# ~/.config/arco-ocean/settings (scripts/settings.sh). Logs: journalctl --user -u
+# ~/.config/arco-ocean/settings (scripts/lib/common.sh). Logs: journalctl --user -u
 # arco-ocean-forecast, and logs/ in the checkout.
 
 [Unit]

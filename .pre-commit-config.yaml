@@ -35,12 +35,21 @@ repos:
         name: marimo check
         entry: uvx marimo@0.25.2 check
         language: system
-        files: ^tutorials/.*\.py$
+        files: ^notebooks/.*\.py$
       - id: site-tests
         name: web page tests (node --test)
-        entry: uvx --from nodejs-wheel==24.19.0 node --test site/status.test.mjs
+        entry: uvx --from nodejs-wheel==24.19.0 node --test 'tests/js/*.test.js'
         language: system
-        files: ^site/.*\.(js|mjs)$
+        files: ^(docs/assets/js|tests/js)/
+        pass_filenames: false
+      # The scripts' tests (tests/bats; the libraries are submodules: git submodule update
+      # --init). The heartbeat's need the project's environment (uv sync), else they are skipped.
+      - id: bats
+        name: scripts' tests (bats)
+        entry: tests/bats/helpers/bats-core/bin/bats tests/bats
+        language: system
+        # The heartbeat's tests run the package: src/arco_ocean too.
+        files: ^(scripts|systemd|src/arco_ocean|tests/bats)/
         pass_filenames: false
 
   - repo: https://github.com/shellcheck-py/shellcheck-py

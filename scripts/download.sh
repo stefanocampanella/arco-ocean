@@ -13,9 +13,18 @@
 # --resume` (`--extend --resume` for an extension), which keeps the blocks already committed and
 # writes the others (up to --attempts runs in all). A forecast download stopped at a run its
 # sources have not published yet (exit status 75: the runs before are stored) is attempted again
-# with --extend. Transient network errors are already retried
-# inside arco-make, block by block (the recipe's [retries]). It needs arco-make with `--extend`
-# and recipes without dates: an image built after the arco-make stack is merged.
+# with --extend. Transient network errors are already retried inside arco-make, block by block
+# (the recipe's [retries]).
+#
+# With --status-url, the download publishes its progress, a JSON document the ARCO-OCEAN web page
+# shows (for the historical downloads, run once): "running" with the end of the newest block
+# committed, read from the repository at the start, every --heartbeat seconds and at the end, then
+# "finished" or "failed"; with --alert, a failure opens a GitHub issue (lib/common.sh,
+# progress_run). A download killed outright stops updating it: the page calls it stale.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "${SCRIPT_DIR}/lib/common.sh" || { echo "Error: ${SCRIPT_DIR}/lib/common.sh is missing." >&2; exit 1; }
 
 usage() {
     cat <<EOF
@@ -32,15 +41,9 @@ DESCRIPTION
                                 <product>_res-<res>.toml (e.g. historical_res-0p25).
 
     Options:
-        --project-dir DIR       Project root directory (default: current working directory).
-        --config-dir DIR        Where to look for recipes (default: \${PROJECT_ROOT}/configs/download).
         --output PATH           Output repository: a directory, s3:// or gs:// URL (default:
-                                DATA_ROOT/<product>/res=<res>, from the recipe name).
-        --data-root ROOT        Where the default outputs go, DATA_ROOT: a directory, s3:// or
-                                gs:// URL, e.g. s3://ogs-arco-ocean, the bucket's layout (default:
-                                the environment's, the settings file's, scripts/.env's, else
-                                the project's data/: scripts/settings.sh). Not with --output.
-        --log-dir DIR           Where to write the log (default: \${PROJECT_ROOT}/logs/download).
+                                DATA_ROOT/<product>/res=<res>, from the recipe name). Not with
+                                --data-root.
         --start DATE            First day (YYYY-MM-DD): the recipes have no dates. Not with --extend.
         --end DATE              The day after the last (YYYY-MM-DD). Required.
         --extend                Append the days after the output's last, up to --end, as a new
@@ -49,25 +52,23 @@ DESCRIPTION
         --resume                Continue a run that failed earlier (arco-make --resume).
         --attempts N            Runs in all, the later ones resuming (default: 3).
         --retry-delay SECONDS   Wait between runs (default: 60).
-        --image IMAGE           Apptainer image (default: oras://ghcr.io/stefanocampanella/arco-make:v0.2.0).
-        --virtual-env PATH      Run from a local virtual environment instead of Apptainer.
-        --env-file FILE         Environment file to source (default: scripts/.env).
-        --bind SRC[:DST[:OPTS]] Path to bind within the Apptainer container (repeatable).
-        --log-level LEVEL       debug, info, warning, error or critical (default: info).
+$(progress_usage historical)
+$(common_usage download)
         -h, --help              Show this help.
+
+    Exit status: 0 the download finished; 75 a forecast run is not published yet (the runs
+    before are stored); 1 otherwise.
 
     Examples:
         $0 --start 1993-01-01 --end 2026-07-01 historical_res-0p25
         $0 --extend --end 2026-08-01 historical_res-0p25
+        $0 --start 1993-01-01 --end 2026-07-01 \\
+            --status-url s3://BUCKET/status/historical/res=0p25.json --alert historical_res-0p25
 EOF
 }
 
-PROJECT_ROOT=""
-CONFIG_DIR=""
+common_defaults
 OUTPUT=""
-ROOT_OPTION=""
-ROOT_GIVEN=false
-LOG_DIR=""
 START_DATE=""
 END_DATE=""
 REPLACE=false
@@ -75,47 +76,23 @@ RESUME=false
 EXTEND=false
 ATTEMPTS=3
 RETRY_DELAY=60
-# The image of the arco-make version pinned in pyproject.toml (tests/python/test_image.py).
-IMAGE="oras://ghcr.io/stefanocampanella/arco-make:v0.2.0"
-VENV=""
-ENV_FILE="scripts/.env"
-BINDS=()
-LOG_LEVEL="info"
+progress_defaults
 POSITIONAL_ARGS=()
 
 while [[ $# -gt 0 ]]; do
+    common_option "$@"
+    if [[ ${SHIFT_BY} -gt 0 ]]; then shift "${SHIFT_BY}"; continue; fi
+    progress_option "$@"
+    if [[ ${SHIFT_BY} -gt 0 ]]; then shift "${SHIFT_BY}"; continue; fi
     case "$1" in
-        --project-dir) PROJECT_ROOT="$2"; shift 2 ;;
-        --project-dir=*) PROJECT_ROOT="${1#*=}"; shift ;;
-        --config-dir) CONFIG_DIR="$2"; shift 2 ;;
-        --config-dir=*) CONFIG_DIR="${1#*=}"; shift ;;
-        --output) OUTPUT="$2"; shift 2 ;;
-        --output=*) OUTPUT="${1#*=}"; shift ;;
-        --data-root) ROOT_OPTION="$2"; ROOT_GIVEN=true; shift 2 ;;
-        --data-root=*) ROOT_OPTION="${1#*=}"; ROOT_GIVEN=true; shift ;;
-        --log-dir) LOG_DIR="$2"; shift 2 ;;
-        --log-dir=*) LOG_DIR="${1#*=}"; shift ;;
-        --start) START_DATE="$2"; shift 2 ;;
-        --start=*) START_DATE="${1#*=}"; shift ;;
-        --end) END_DATE="$2"; shift 2 ;;
-        --end=*) END_DATE="${1#*=}"; shift ;;
+        --output|--output=*) option_value "$@"; OUTPUT="${VALUE}"; shift "${SHIFT_BY}" ;;
+        --start|--start=*) option_value "$@"; START_DATE="${VALUE}"; shift "${SHIFT_BY}" ;;
+        --end|--end=*) option_value "$@"; END_DATE="${VALUE}"; shift "${SHIFT_BY}" ;;
         --replace) REPLACE=true; shift ;;
         --extend) EXTEND=true; shift ;;
         --resume) RESUME=true; shift ;;
-        --attempts) ATTEMPTS="$2"; shift 2 ;;
-        --attempts=*) ATTEMPTS="${1#*=}"; shift ;;
-        --retry-delay) RETRY_DELAY="$2"; shift 2 ;;
-        --retry-delay=*) RETRY_DELAY="${1#*=}"; shift ;;
-        --image) IMAGE="$2"; shift 2 ;;
-        --image=*) IMAGE="${1#*=}"; shift ;;
-        --virtual-env) VENV="$2"; shift 2 ;;
-        --virtual-env=*) VENV="${1#*=}"; shift ;;
-        --env-file) ENV_FILE="$2"; shift 2 ;;
-        --env-file=*) ENV_FILE="${1#*=}"; shift ;;
-        --bind) BINDS+=("$2"); shift 2 ;;
-        --bind=*) BINDS+=("${1#*=}"); shift ;;
-        --log-level) LOG_LEVEL="$2"; shift 2 ;;
-        --log-level=*) LOG_LEVEL="${1#*=}"; shift ;;
+        --attempts|--attempts=*) option_value "$@"; ATTEMPTS="${VALUE}"; shift "${SHIFT_BY}" ;;
+        --retry-delay|--retry-delay=*) option_value "$@"; RETRY_DELAY="${VALUE}"; shift "${SHIFT_BY}" ;;
         -h|--help) usage; exit 0 ;;
         --) shift; POSITIONAL_ARGS+=("$@"); break ;;
         -*) echo "Error: unrecognized option '$1'." >&2; usage >&2; exit 1 ;;
@@ -124,8 +101,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -n "${OUTPUT}" && "${ROOT_GIVEN}" == true ]]; then
-    echo "Error: give --output or --data-root, not both." >&2
-    exit 1
+    die "give --output or --data-root, not both."
 fi
 RECIPE="${POSITIONAL_ARGS[0]:-}"
 if [[ -z "${RECIPE}" || ${#POSITIONAL_ARGS[@]} -gt 1 ]]; then
@@ -133,97 +109,46 @@ if [[ -z "${RECIPE}" || ${#POSITIONAL_ARGS[@]} -gt 1 ]]; then
     usage >&2
     exit 1
 fi
-if [[ -z "${END_DATE}" ]]; then
-    echo "Error: give --end (the recipes have no dates)." >&2
-    exit 1
-fi
+[[ -n "${END_DATE}" ]] || die "give --end (the recipes have no dates)."
 if [[ "${EXTEND}" == true && ( -n "${START_DATE}" || "${REPLACE}" == true ) ]]; then
-    echo "Error: --extend starts the day after the output's last: not with --start nor --replace." >&2
-    exit 1
+    die "--extend starts the day after the output's last: not with --start nor --replace."
 fi
 if [[ "${EXTEND}" == false && -z "${START_DATE}" ]]; then
-    echo "Error: give --start (the recipes have no dates), or --extend an existing output." >&2
-    exit 1
+    die "give --start (the recipes have no dates), or --extend an existing output."
 fi
 if [[ "${REPLACE}" == true && "${RESUME}" == true ]]; then
-    echo "Error: --replace starts over, --resume continues: give one of them." >&2
-    exit 1
+    die "--replace starts over, --resume continues: give one of them."
 fi
-if ! [[ "${ATTEMPTS}" =~ ^[1-9][0-9]*$ ]]; then
-    echo "Error: --attempts takes a positive integer (got '${ATTEMPTS}')." >&2
-    exit 1
-fi
-if ! [[ "${RETRY_DELAY}" =~ ^[0-9]+$ ]]; then
-    echo "Error: --retry-delay takes a number of seconds (got '${RETRY_DELAY}')." >&2
-    exit 1
-fi
+positive_integer --attempts "${ATTEMPTS}"
+seconds --retry-delay "${RETRY_DELAY}"
+positive_integer --heartbeat "${HEARTBEAT}"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="${PROJECT_ROOT:-$(pwd)}"
-cd "${PROJECT_ROOT}" || exit 1
-
-# Where outputs go (DATA_ROOT): scripts/settings.sh.
-# shellcheck source=/dev/null
-if ! source "${SCRIPT_DIR}/settings.sh"; then
-    echo "Error: ${SCRIPT_DIR}/settings.sh is missing: the scripts need it." >&2
-    exit 1
-fi
-resolve_data_root "${ENV_FILE}" "${ROOT_GIVEN}" "${ROOT_OPTION}" || exit 1
-
-# Resolve the recipe.
-CONFIG_DIR="${CONFIG_DIR:-${PROJECT_ROOT}/configs/download}"
-if [[ -f "${RECIPE}" ]]; then
-    CONFIG_PATH="${RECIPE}"
-else
-    CONFIG_PATH="${CONFIG_DIR}/${RECIPE%.toml}.toml"
-fi
-if [[ ! -f "${CONFIG_PATH}" ]]; then
-    echo "Error: recipe '${CONFIG_PATH}' not found." >&2
-    exit 1
-fi
-NAME="$(basename "${CONFIG_PATH}" .toml)"
+enter_project
+resolve_recipe download "${RECIPE}"
 
 # Default output: DATA_ROOT/<product>/res=<res>, from a recipe named <product>_res-<res>.
 if [[ -z "${OUTPUT}" ]]; then
-    if [[ ! "${NAME}" =~ ^([a-z0-9-]+)_res-([0-9]+p[0-9]+)$ ]]; then
-        echo "Error: cannot derive the output from '${NAME}' (expected <product>_res-<res>): give --output." >&2
-        exit 1
-    fi
-    OUTPUT="$(default_output "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}")" || exit 1
+    recipe_product "${NAME}" \
+        || die "cannot derive the output from '${NAME}' (expected <product>_res-<res>): give --output."
+    OUTPUT="$(default_output "${PRODUCT}" "${RES}")" || exit 1
 fi
-if [[ "${OUTPUT}" != *://* ]]; then
-    mkdir -p "$(dirname "${OUTPUT}")"
-fi
-
-LOG_DIR="${LOG_DIR:-${PROJECT_ROOT}/logs/download}"
-mkdir -p "${LOG_DIR}"
-LOG_FILE="${LOG_DIR}/${NAME}_$(date -u +%Y%m%dT%H%M%SZ).log"
-
-if [[ -n "${VENV}" ]]; then
-    # The environment's own arco-make: `uv run` here would use this project's environment
-    # (the tutorials'), ignoring VIRTUAL_ENV.
-    if [[ ! -x "${VENV}/bin/arco-make" ]]; then
-        echo "Error: no arco-make in the virtual environment '${VENV}'." >&2
-        exit 1
-    fi
-    RUN_CMD=("${VENV}/bin/arco-make")
-else
-    if ! command -v apptainer >/dev/null 2>&1; then
-        echo "Error: Apptainer is required without --virtual-env." >&2
-        exit 1
-    fi
-    APPTAINER_FLAGS=()
-    for BIND in "${BINDS[@]+"${BINDS[@]}"}"; do
-        APPTAINER_FLAGS+=(--bind "${BIND}")
-    done
-    RUN_CMD=(apptainer run "${APPTAINER_FLAGS[@]+"${APPTAINER_FLAGS[@]}"}" "${IMAGE}")
-fi
-
-# Exit status of arco-make when a forecast run is not published yet: the runs before it are
-# stored, and the next attempt extends the output (not --resume, not --start).
-NOT_PUBLISHED=75
+make_parent "${OUTPUT}"
+open_log download
+arco_make_command
 
 echo "Download of ${NAME} to ${OUTPUT}, log: ${LOG_FILE} (started $(date -u), PID $$, host $(hostname))"
+
+# The progress (--status-url) and the alert (--alert); whatever ends the script (its exits, an
+# error, a signal it can trap), they say how.
+PROGRESS_START=()
+AGAIN="rerun it with --extend --resume."
+if [[ "${EXTEND}" == false ]]; then
+    PROGRESS_START=(--start "${START_DATE}")
+    AGAIN="rerun it with --resume."
+fi
+progress_run download "${NAME}" "${OUTPUT}" "${AGAIN}" --end "${END_DATE}" \
+    "${PROGRESS_START[@]+"${PROGRESS_START[@]}"}"
+
 STATUS=0
 for (( attempt=1; attempt<=ATTEMPTS; attempt++ )); do
     FLAGS=(--no-progress --log-level="${LOG_LEVEL}" --end="${END_DATE}")
@@ -256,6 +181,8 @@ for (( attempt=1; attempt<=ATTEMPTS; attempt++ )); do
         "${RUN_CMD[@]}" download "${FLAGS[@]}" "${MODE[@]+"${MODE[@]}"}" -- "${CONFIG_PATH}" "${OUTPUT}"
     } >> "${LOG_FILE}" 2>&1
     STATUS=$?
+    # arco-make's own: the progress and the alert report it.
+    RUN_STATUS=${STATUS}
     if [[ ${STATUS} -eq 0 ]]; then
         echo "Download of ${NAME} finished: ${OUTPUT} ($(date -u))."
         exit 0

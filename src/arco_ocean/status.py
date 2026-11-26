@@ -31,7 +31,7 @@ import os
 import pathlib
 import tempfile
 from collections.abc import Callable, Generator
-from typing import Annotated, Literal, get_args
+from typing import Annotated, Literal, Protocol, get_args
 
 import click
 from pydantic import (
@@ -47,7 +47,8 @@ from pydantic import (
 SCHEMA = 1
 CollectionState = Literal["running", "finished", "aborted"]
 ResolutionState = Literal["pending", "downloading", "finished", "not_published", "failed"]
-# The recipes' `[forecast] missing_after`, when a heartbeat gives none (site/status.js's too).
+# The recipes' `[forecast] missing_after`, when a heartbeat gives none (the web page's too:
+# docs/assets/js/status.js).
 DEFAULT_MISSING_AFTER_DAYS = 2.0
 # `arco-ocean status overdue`'s exit status for a collection that finished behind.
 BEHIND_EXIT = 3
@@ -133,22 +134,27 @@ def locked(state_file: pathlib.Path) -> Generator[None]:
     yield
 
 
-def load(state_file: pathlib.Path, fresh: bool = False) -> State | None:
-  """The state, or None if there is none. A state file that is not a heartbeat's (another
-  version's, damaged) is an error, unless a collection starts anew (`fresh`): it is then replaced,
-  as otherwise every heartbeat would fail until the file is removed by hand."""
+def load_model[M: BaseModel](model: type[M], state_file: pathlib.Path, fresh: bool) -> M | None:
+  """The state in `state_file`, as `model`, or None if there is none. A state file that is not
+  one (another version's, damaged) is an error, unless a run starts anew (`fresh`): it is then
+  replaced, as otherwise every heartbeat would fail until the file is removed by hand."""
   try:
     text = state_file.read_text()
   except FileNotFoundError:
     return None
   try:
-    return State.model_validate_json(text)
+    return model.model_validate_json(text)
   except ValidationError as error:
     problem = f"{state_file} is not a heartbeat's state ({error.error_count()} errors)"
     if fresh:
       click.echo(f"Warning: {problem}: a new one is written.", err=True)
       return None
-    raise click.ClickException(f"{problem}: the next collection's start replaces it") from error
+    raise click.ClickException(f"{problem}: the next start replaces it") from error
+
+
+def load(state_file: pathlib.Path, fresh: bool = False) -> State | None:
+  """The forecast collection's state (`load_model`)."""
+  return load_model(State, state_file, fresh)
 
 
 def write_atomically(path: pathlib.Path, text: str) -> None:
@@ -249,15 +255,29 @@ class Files:
 pass_files = click.make_pass_decorator(Files)
 
 
-def update(
-  files: Files, change: Callable[[State | None], State | None], fresh: bool = False
+class StateFile(Protocol):
+  """A state file's model (`State`, `progress.ProgressState`): the published document, and what
+  stays private."""
+
+  updated_at: datetime.datetime
+
+  def public(self) -> str: ...
+
+  def model_dump_json(self, *, indent: int | None = None, by_alias: bool | None = None) -> str: ...
+
+
+def update_state[S: StateFile](
+  files: Files,
+  load_state: Callable[[pathlib.Path, bool], S | None],
+  change: Callable[[S | None], S | None],
+  fresh: bool,
 ) -> None:
-  """Apply `change` to the state file, under its lock, then publish the document. A change that
-  returns None leaves both as they are. `fresh`: see `load`."""
-  # Before any read: the repositories may be in the bucket (DATA_ROOT, scripts/settings.sh).
+  """Apply `change` to the state file (read by `load_state`), under its lock, then publish the
+  document. A change that returns None leaves both as they are. `fresh`: see `load_model`."""
+  # Before any read: the repositories may be in the bucket (DATA_ROOT, scripts/lib/common.sh).
   apply_settings()
   with locked(files.state_file):
-    state = change(load(files.state_file, fresh))
+    state = change(load_state(files.state_file, fresh))
     if state is None:
       return
     state.updated_at = now()
@@ -266,10 +286,22 @@ def update(
       publish(files.publish, state.public())
 
 
-def started(state: State | None, files: Files) -> State:
+def require_started[S](state: S | None, files: Files, what: str) -> S:
+  """The state, or an error if `what` (a collection, a download) has not started."""
   if state is None:
-    raise click.ClickException(f"no collection started: {files.state_file} is missing")
+    raise click.ClickException(f"no {what} started: {files.state_file} is missing")
   return state
+
+
+def update(
+  files: Files, change: Callable[[State | None], State | None], fresh: bool = False
+) -> None:
+  """`update_state` of the forecast collection's state."""
+  update_state(files, load, change, fresh)
+
+
+def started(state: State | None, files: Files) -> State:
+  return require_started(state, files, "collection")
 
 
 def repository_option(
@@ -440,7 +472,8 @@ def duration(delta: datetime.timedelta) -> str:
 
 def behind(heartbeat: Heartbeat, at: datetime.datetime) -> list[str]:
   """Why the resolutions of a collection are behind, as the web page judges a finished one
-  (`behind` in site/status.js): a newest stored run older than the recipes' `missing_after`
+  (`behind` in docs/assets/js/status.js): a newest stored run older than the recipes'
+  `missing_after`
   before the newest asked for (runs that old are stored even without a source, flagged), none
   stored, or a resolution waiting for its sources for longer than that (a source that stopped
   publishing keeps it waiting every day, while its older runs are stored without it)."""

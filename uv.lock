@@ -227,6 +227,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "marimo" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
@@ -265,6 +266,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "marimo", specifier = "==0.25.2" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },

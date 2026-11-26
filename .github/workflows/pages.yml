@@ -1,41 +1,50 @@
 # SPDX-FileCopyrightText: 2026 Stefano Campanella
 # SPDX-License-Identifier: MIT
-# The web page (site/) on GitHub Pages, deployed from main. Static files, no build: the logo is a
-# link to assets/, copied as a file. Pages must be enabled once, with "GitHub Actions" as source
-# (Settings, Pages).
+# The site (docs/ and the notebooks, scripts/site.sh) on GitHub Pages, deployed from main; built, not deployed, on pull
+# requests, so that a page that does not build fails them. Pages must be enabled once, with
+# "GitHub Actions" as source (Settings, Pages).
 name: pages
 
 on:
   push:
     branches: [ main ]
-    paths: [ "site/**", "assets/**", ".github/workflows/pages.yml" ]
+    paths: [ "docs/**", "notebooks/**", "scripts/site.sh", "scripts/lib/**", ".github/workflows/pages.yml" ]
+  pull_request:
+    paths: [ "docs/**", "notebooks/**", "scripts/site.sh", "scripts/lib/**", ".github/workflows/pages.yml" ]
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: false
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+      - name: Build the site (the notebooks exported to pages, then mystmd)
+        env:
+          # The site is served under /arco-ocean/ (a project's Pages).
+          BASE_URL: /${{ github.event.repository.name }}
+        run: scripts/site.sh build --strict
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: docs/_build/html
+
+  # From main only, one at a time.
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v6
-      - name: Collect the site
-        run: |
-          mkdir _site
-          cp -rL site/. _site/
-          rm _site/*.test.mjs
-      - uses: actions/configure-pages@v6
-      - uses: actions/upload-pages-artifact@v5
-        with:
-          path: _site
       - id: deployment
         uses: actions/deploy-pages@v5

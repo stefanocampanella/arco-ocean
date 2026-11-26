@@ -7,9 +7,8 @@
 # Collect the ARCO-OCEAN forecast runs, at every resolution, with scripts/download.sh.
 #
 # Daily (systemd/arco-ocean-forecast.timer), it adds the runs after each repository's last one
-# up to today's (arco-make download --extend: a day missed is caught up the next time, its GLO12
-# values then from later
-# releases, flagged). The first time, --start backfills from that day (the end of the historical
+# up to today's (arco-make download --extend: a day missed is caught up the next time, its
+# GLO12 values then from later releases, flagged). The first time, --start backfills from that day (the end of the historical
 # dataset). The forecast recipes (configs/download/forecast_res-<res>.toml) keep the last five
 # years of runs. A run fails while one of its sources has not published it yet (a release
 # late): it is attempted again (--attempts, --retry-delay), and else caught up the next day.
@@ -17,6 +16,10 @@
 # one wait. With --status-url, the collection publishes a heartbeat, a JSON document the
 # ARCO-OCEAN web page reads (`arco-ocean status`, src/arco_ocean/status.py): its state, each
 # resolution's, the newest run stored, updated every few minutes while it runs.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "${SCRIPT_DIR}/lib/common.sh" || { echo "Error: ${SCRIPT_DIR}/lib/common.sh is missing." >&2; exit 1; }
 
 usage() {
     cat <<EOF
@@ -50,7 +53,7 @@ DESCRIPTION
 
     Other options (--image, --virtual-env, --env-file, --bind, --config-dir, --log-level) go to
     scripts/download.sh, as given. Outputs are DATA_ROOT/forecast/res=<res>: --data-root ROOT
-    gives it, else scripts/settings.sh (resolved once, and given to every download); the
+    gives it, else scripts/lib/common.sh (resolved once, and given to every download); the
     heartbeat reads them there. The heartbeat is "arco-ocean status", run with uv in this
     checkout's environment (ARCO_OCEAN_CLI names another arco-ocean command): it reads the
     repositories with the arco-make pinned there, the default image's; with another --image or
@@ -61,92 +64,59 @@ DESCRIPTION
 
     Examples:
         $0 --start 2026-07-01                 # the first time: backfill to today's run
-        $0                                    # every day, from systemd (see README)
+        $0                                    # every day, from systemd (docs/forecasts.md)
         $0 --status-url s3://BUCKET/status/forecast.json   # with the web page's heartbeat
         $0 --data-root s3://BUCKET            # the repositories at s3://BUCKET/forecast/res=<res>
 EOF
 }
 
+common_defaults
 RESOLUTIONS="0p25,0p5,1p0"
 START_DATE=""
 END_DATE=""
 ATTEMPTS=6
 RETRY_DELAY=1800
-PROJECT_ROOT=""
-LOG_DIR=""
 STATUS_URL=""
 HEARTBEAT=300
 STALE_AFTER=30
 MISSING_AFTER=2
-ENV_FILE="scripts/.env"
-ROOT_OPTION=""
-ROOT_GIVEN=false
-PASS=()
 
 while [[ $# -gt 0 ]]; do
+    # The shared options: --project-dir, --log-dir and --data-root are this script's; the
+    # runner's (--image, --virtual-env, --env-file, --bind, --config-dir, --log-level) go on to
+    # download.sh, as given (the environment file is read here too, for DATA_ROOT).
+    common_option "$@"
+    if [[ ${SHIFT_BY} -gt 0 ]]; then shift "${SHIFT_BY}"; continue; fi
     case "$1" in
-        --res) RESOLUTIONS="$2"; shift 2 ;;
-        --res=*) RESOLUTIONS="${1#*=}"; shift ;;
-        --start) START_DATE="$2"; shift 2 ;;
-        --start=*) START_DATE="${1#*=}"; shift ;;
-        --end) END_DATE="$2"; shift 2 ;;
-        --end=*) END_DATE="${1#*=}"; shift ;;
-        --attempts) ATTEMPTS="$2"; shift 2 ;;
-        --attempts=*) ATTEMPTS="${1#*=}"; shift ;;
-        --retry-delay) RETRY_DELAY="$2"; shift 2 ;;
-        --retry-delay=*) RETRY_DELAY="${1#*=}"; shift ;;
-        --project-dir) PROJECT_ROOT="$2"; shift 2 ;;
-        --project-dir=*) PROJECT_ROOT="${1#*=}"; shift ;;
-        --log-dir) LOG_DIR="$2"; shift 2 ;;
-        --log-dir=*) LOG_DIR="${1#*=}"; shift ;;
-        --status-url) STATUS_URL="$2"; shift 2 ;;
-        --status-url=*) STATUS_URL="${1#*=}"; shift ;;
-        --heartbeat) HEARTBEAT="$2"; shift 2 ;;
-        --heartbeat=*) HEARTBEAT="${1#*=}"; shift ;;
-        --missing-after) MISSING_AFTER="$2"; shift 2 ;;
-        --missing-after=*) MISSING_AFTER="${1#*=}"; shift ;;
-        --stale-after) STALE_AFTER="$2"; shift 2 ;;
-        --stale-after=*) STALE_AFTER="${1#*=}"; shift ;;
-        # Given to download.sh (the environment file is read here too, for DATA_ROOT).
-        --env-file) ENV_FILE="$2"; PASS+=("$1" "$2"); shift 2 ;;
-        --env-file=*) ENV_FILE="${1#*=}"; PASS+=("$1"); shift ;;
-        --image|--virtual-env|--bind|--config-dir|--log-level)
-            PASS+=("$1" "$2"); shift 2 ;;
-        --image=*|--virtual-env=*|--bind=*|--config-dir=*|--log-level=*)
-            PASS+=("$1"); shift ;;
-        --data-root) ROOT_OPTION="$2"; ROOT_GIVEN=true; shift 2 ;;
-        --data-root=*) ROOT_OPTION="${1#*=}"; ROOT_GIVEN=true; shift ;;
+        --res|--res=*) option_value "$@"; RESOLUTIONS="${VALUE}"; shift "${SHIFT_BY}" ;;
+        --start|--start=*) option_value "$@"; START_DATE="${VALUE}"; shift "${SHIFT_BY}" ;;
+        --end|--end=*) option_value "$@"; END_DATE="${VALUE}"; shift "${SHIFT_BY}" ;;
+        --attempts|--attempts=*) option_value "$@"; ATTEMPTS="${VALUE}"; shift "${SHIFT_BY}" ;;
+        --retry-delay|--retry-delay=*) option_value "$@"; RETRY_DELAY="${VALUE}"; shift "${SHIFT_BY}" ;;
+        --status-url|--status-url=*) option_value "$@"; STATUS_URL="${VALUE}"; shift "${SHIFT_BY}" ;;
+        --heartbeat|--heartbeat=*) option_value "$@"; HEARTBEAT="${VALUE}"; shift "${SHIFT_BY}" ;;
+        --missing-after|--missing-after=*) option_value "$@"; MISSING_AFTER="${VALUE}"; shift "${SHIFT_BY}" ;;
+        --stale-after|--stale-after=*) option_value "$@"; STALE_AFTER="${VALUE}"; shift "${SHIFT_BY}" ;;
         -h|--help) usage; exit 0 ;;
         *) echo "Error: unrecognized argument '$1'." >&2; usage >&2; exit 1 ;;
     esac
 done
 
-if ! [[ "${HEARTBEAT}" =~ ^[1-9][0-9]*$ ]]; then
-    echo "Error: --heartbeat takes a positive number of seconds (got '${HEARTBEAT}')." >&2
-    exit 1
-fi
+positive_integer --heartbeat "${HEARTBEAT}"
+# Checked here too: download.sh would refuse them for every resolution, after the start.
+positive_integer --attempts "${ATTEMPTS}"
+seconds --retry-delay "${RETRY_DELAY}"
 # Positive: the page and the heartbeat read 0 as their default, two days.
 if ! [[ "${MISSING_AFTER}" =~ ^[0-9]+([.][0-9]+)?$ ]] || [[ "${MISSING_AFTER}" =~ ^0+([.]0+)?$ ]]; then
-    echo "Error: --missing-after takes a positive number of days (got '${MISSING_AFTER}')." >&2
-    exit 1
+    die "--missing-after takes a positive number of days (got '${MISSING_AFTER}')."
 fi
 if ! [[ "${STALE_AFTER}" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
-    echo "Error: --stale-after takes a number of hours (got '${STALE_AFTER}')." >&2
-    exit 1
+    die "--stale-after takes a number of hours (got '${STALE_AFTER}')."
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="${PROJECT_ROOT:-$(pwd)}"
-cd "${PROJECT_ROOT}" || exit 1
-
-# Where outputs go (DATA_ROOT): scripts/settings.sh. Resolved once, here, and given to every
-# download (--data-root), so the heartbeat reads where they write.
-# shellcheck source=/dev/null
-if ! source "${SCRIPT_DIR}/settings.sh"; then
-    echo "Error: ${SCRIPT_DIR}/settings.sh is missing: the scripts need it." >&2
-    exit 1
-fi
-resolve_data_root "${ENV_FILE}" "${ROOT_GIVEN}" "${ROOT_OPTION}" || exit 1
+# Where outputs go (DATA_ROOT): resolved once, here, and given to every download (--data-root),
+# so the heartbeat reads where they write.
+enter_project
 END_DATE="${END_DATE:-$(date -u -d tomorrow +%Y-%m-%d)}"
 LOG_DIR="${LOG_DIR:-${PROJECT_ROOT}/logs/forecast}"
 mkdir -p "${LOG_DIR}"
@@ -160,17 +130,11 @@ fi
 
 # The heartbeat (--status-url): `arco-ocean status`, in this checkout's environment (uv; its
 # arco-make is the release the image has), reads the repositories where scripts/download.sh
-# writes them. ARCO_OCEAN_CLI names another `arco-ocean` command (the tests' environment).
+# writes them.
 STATUS_FILE="${LOG_DIR}/status.json"
 HEARTBEAT_PID=""
 ENDED=false
-if [[ -n "${ARCO_OCEAN_CLI:-}" ]]; then
-    ARCO_OCEAN=("${ARCO_OCEAN_CLI}")
-else
-    # Isolated from the caller's Python settings, as `python -I` was: its arco-make is the lock's.
-    ARCO_OCEAN=(env -u PYTHONPATH -u PYTHONHOME
-        uv run --quiet --frozen --no-default-groups --project "${SCRIPT_DIR}/.." arco-ocean)
-fi
+arco_ocean_command
 
 # Update the heartbeat (no-op without --status-url). It never stops the collection: a failure is
 # logged in the log directory's status.log.
@@ -187,10 +151,10 @@ status() {
 # page calls it stale.
 on_exit() {
     local code=$?
-    if [[ -n "${HEARTBEAT_PID}" ]]; then
-        kill "${HEARTBEAT_PID}" 2>/dev/null
-    fi
-    if [[ "${ENDED}" == false && -n "${HEARTBEAT_PID}" ]]; then
+    local started=false
+    [[ -n "${HEARTBEAT_PID}" ]] && started=true
+    heartbeat_stop
+    if [[ "${ENDED}" == false && "${started}" == true ]]; then
         status end aborted --detail "The collection stopped unexpectedly (exit status ${code})."
     fi
 }
@@ -209,20 +173,8 @@ if [[ -n "${STATUS_URL}" ]]; then
     status start --target-run "$(date -u -d "${END_DATE} - 1 day" +%Y-%m-%d)" \
         --heartbeat-seconds "${HEARTBEAT}" --stale-after-hours "${STALE_AFTER}" \
         --missing-after-days "${MISSING_AFTER}" "${REPOS[@]}"
-    # The beat, until the collection ends. Stopped, it stops its sleep too (else left behind with
-    # the script's output open); it does not hold the collection's lock.
-    (
-        exec 9>&-
-        SLEEP_PID=""
-        trap 'kill "${SLEEP_PID}" 2>/dev/null; exit 0' TERM
-        while true; do
-            sleep "${HEARTBEAT}" &
-            SLEEP_PID=$!
-            wait "${SLEEP_PID}"
-            status beat
-        done
-    ) &
-    HEARTBEAT_PID=$!
+    # The beat, until the collection ends.
+    heartbeat_start "${HEARTBEAT}" status beat
 fi
 
 if [[ -n "${START_DATE}" ]]; then
@@ -231,9 +183,6 @@ else
     MODE=(--extend)
 fi
 
-# Exit status of scripts/download.sh when a source has not published a run yet (the runs before
-# it are stored).
-NOT_PUBLISHED=75
 FAILED=()
 WAITING=()
 IFS=',' read -r -a RES_LIST <<< "${RESOLUTIONS}"
@@ -243,7 +192,8 @@ for RES in "${RES_LIST[@]}"; do
     CODE=0
     "${SCRIPT_DIR}/download.sh" --project-dir "${PROJECT_ROOT}" --log-dir "${LOG_DIR}" \
         "${MODE[@]}" --end "${END_DATE}" --attempts "${ATTEMPTS}" --retry-delay "${RETRY_DELAY}" \
-        --data-root "${DATA_ROOT}" "${PASS[@]+"${PASS[@]}"}" "forecast_res-${RES}" || CODE=$?
+        --data-root "${DATA_ROOT}" "${RUNNER_OPTIONS[@]+"${RUNNER_OPTIONS[@]}"}" \
+        "forecast_res-${RES}" || CODE=$?
     if [[ ${CODE} -eq 0 ]]; then
         status res "${RES}" finished
     elif [[ ${CODE} -eq ${NOT_PUBLISHED} ]]; then
@@ -258,9 +208,8 @@ done
 # A collection that ended with the runs stored, but behind (a source that stopped publishing: its
 # runs are stored without it, days late, or wait every day; see `arco-ocean status overdue`),
 # fails: the unit's alert (scripts/alert.sh) reports it, as the page shows it stale.
-# `arco-ocean status overdue`'s exit status for a collection that finished behind; forecast.sh
-# exits with it too, so that the alert tells it from other failures.
-BEHIND=3
+# `arco-ocean status overdue` exits with BEHIND for a collection that finished behind; this
+# script too, so that the alert tells it from other failures.
 overdue() {
     [[ -n "${STATUS_URL}" ]] || return 0
     local CODE=0
@@ -285,7 +234,7 @@ if [[ ${#WAITING[@]} -gt 0 ]]; then
     echo "Forecast collection: the newest run is not published yet at ${WAITING[*]}; the next run catches up." >&2
     overdue
     # Not a failure (the unit counts it a success), but not every run stored: 75, as download.sh.
-    exit 75
+    exit "${NOT_PUBLISHED}"
 fi
 status end finished
 overdue

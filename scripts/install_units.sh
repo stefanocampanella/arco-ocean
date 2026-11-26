@@ -11,6 +11,10 @@
 # (arco-ocean-alert@.service, scripts/alert.sh). Run it again to change the options; --uninstall
 # removes everything it installed.
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "${SCRIPT_DIR}/lib/common.sh" || { echo "Error: ${SCRIPT_DIR}/lib/common.sh is missing." >&2; exit 1; }
+
 usage() {
     cat <<EOF
 install_units.sh
@@ -49,8 +53,7 @@ OPTIONS=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --alerts) ALERTS=true; shift ;;
-        --alert-repo) ALERT_REPO="$2"; shift 2 ;;
-        --alert-repo=*) ALERT_REPO="${1#*=}"; shift ;;
+        --alert-repo|--alert-repo=*) option_value "$@"; ALERT_REPO="${VALUE}"; shift "${SHIFT_BY}" ;;
         --no-start) START=false; shift ;;
         --uninstall) UNINSTALL=true; shift ;;
         -h|--help) usage; exit 0 ;;
@@ -62,7 +65,7 @@ done
 
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="${CHECKOUT}"
 UNIT_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/systemd/user"
 FORECAST=arco-ocean-forecast
 ALERT=arco-ocean-alert@
@@ -94,10 +97,7 @@ remove_units() {
     rmdir "${UNIT_DIR}/$1.service.d" 2>/dev/null || true
 }
 
-if [[ -n "${ALERT_REPO}" && ! "${ALERT_REPO}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
-    echo "Error: --alert-repo takes OWNER/REPO (got '${ALERT_REPO}')." >&2
-    exit 1
-fi
+if [[ -n "${ALERT_REPO}" ]]; then github_repo --alert-repo "${ALERT_REPO}"; fi
 if [[ -n "${ALERT_REPO}" ]] && ! ${ALERTS}; then
     echo "Error: --alert-repo goes with --alerts." >&2
     exit 1

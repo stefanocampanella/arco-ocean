@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "kind": "statistics",
+  "name": "historical_res-0p25",
+  "state": "running",
+  "detail": null,
+  "started_at": "2026-11-24T09:30:00Z",
+  "updated_at": "2026-11-24T12:28:00Z",
+  "ended_at": null,
+  "heartbeat_seconds": 300,
+  "start": null,
+  "end": null,
+  "done_until": null,
+  "last_commit_at": null,
+  "error": null
+}
