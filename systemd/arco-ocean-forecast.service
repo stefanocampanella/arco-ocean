@@ -16,7 +16,7 @@ Documentation=https://github.com/stefanocampanella/arco-ocean#forecasts
 
 [Service]
 Type=oneshot
-# uv, if downloads run in a virtual environment, is in ~/.local/bin.
+# uv (the heartbeat, `arco-ocean status`, runs with it) is in ~/.local/bin.
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=FORECAST_OPTIONS=
 ExecStart=/bin/bash scripts/forecast.sh --status-url s3://ogs-arco-ocean/status/forecast.json $FORECAST_OPTIONS

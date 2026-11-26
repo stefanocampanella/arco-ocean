@@ -266,12 +266,14 @@ collection finished behind, it was stopped or timed out), and `arco-ocean-alert@
 it succeeds (`OnFailure=` and `OnSuccess=`, in the collection's drop-in). Both run
 `scripts/alert.sh`:
 - **A failure** adds a comment to the open issue labelled `forecast-alert`, or opens one. It
-  holds what systemd tells (the unit's result, exit code and status, and the `journalctl`
-  command for its logs) and the heartbeat's public content (`arco-ocean status summary`), never
-  logs, paths or host names: the repository is public.
-- **A success** closes the open issue, with a comment.
+  says what failed (`forecast.sh` exits with 3 when the collection finished behind, 1 for
+  another failure), holds what systemd tells (the unit's result, exit code and status, and the
+  `journalctl` command for its logs) and the heartbeat's public content (`arco-ocean status
+  summary`), never logs, paths or host names: the repository is public.
+- **A success** closes the open issues, with a comment.
 
-GitHub notifies the repository's watchers. The issues are opened with the maintainer's token,
+A report that cannot reach GitHub is tried again, 6 times, 5 minutes apart. GitHub notifies the
+repository's watchers. The issues are opened with the maintainer's token,
 and GitHub does not email its own actions to a user unless asked: turn on "Include your own
 updates" in GitHub's notification settings (Email preferences) to receive them. The token is in
 `~/.config/arco-ocean/github-token`, readable by its owner only (`chmod 600`): a fine-grained
@@ -279,8 +281,10 @@ personal access token for this repository alone, with the repository permission 
 and write" and nothing else (`--alert-repo OWNER/REPO` for another repository). GitHub emails
 before the token expires; a failed report shows in `systemctl --user list-units --failed`.
 
-A machine that is down reports nothing: the web page shows the collection stale, after three
-missed beats or 30 hours without a collection finished. Until 26 Nov 2026 a GitHub Actions
+What the alerts do not report, as they come from the collection's own unit: a collection that
+hangs, until its unit times out (20 hours); and a collection that never starts (the machine
+down, its timer disabled, lingering off after a reboot). The web page shows these stale, after
+three missed beats or 30 hours without a collection finished. Until 26 Nov 2026 a GitHub Actions
 watchdog read the heartbeat from outside, with a keepalive against GitHub disabling its
 schedule; the installer removes the keepalive's units where it finds them.
 

@@ -94,20 +94,6 @@ remove_units() {
     rmdir "${UNIT_DIR}/$1.service.d" 2>/dev/null || true
 }
 
-if [[ -L "${UNIT_DIR}/${KEEPER}.service" || -e "${UNIT_DIR}/${KEEPER}.service.d/local.conf" ]]; then
-    remove_units "${KEEPER}"
-    echo "Removed the watchdog's keepalive installed before (${KEEPER}): the alerts replace it."
-fi
-
-if ${UNINSTALL}; then
-    for NAME in "${FORECAST}" "${ALERT}"; do
-        remove_units "${NAME}"
-    done
-    systemctl --user daemon-reload
-    echo "Removed the units of ${FORECAST} and ${ALERT}."
-    exit 0
-fi
-
 if [[ -n "${ALERT_REPO}" && ! "${ALERT_REPO}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
     echo "Error: --alert-repo takes OWNER/REPO (got '${ALERT_REPO}')." >&2
     exit 1
@@ -117,6 +103,7 @@ if [[ -n "${ALERT_REPO}" ]] && ! ${ALERTS}; then
     exit 1
 fi
 
+PROJECT_DIR=""
 LOG_DIR=""
 for (( i = 0; i < ${#OPTIONS[@]}; i++ )); do
     OPTION="${OPTIONS[i]}"
@@ -126,10 +113,45 @@ for (( i = 0; i < ${#OPTIONS[@]}; i++ )); do
     fi
     # The alert reads the heartbeat's state file where the collection writes it.
     case "${OPTION}" in
+        --project-dir) PROJECT_DIR="${OPTIONS[i + 1]:-}" ;;
+        --project-dir=*) PROJECT_DIR="${OPTION#*=}" ;;
         --log-dir) LOG_DIR="${OPTIONS[i + 1]:-}" ;;
         --log-dir=*) LOG_DIR="${OPTION#*=}" ;;
     esac
 done
+# As forecast.sh: the project directory from the checkout (the units' working directory), the log
+# directory from the project directory, by default its logs/forecast.
+case "${PROJECT_DIR}" in
+    "") PROJECT_DIR="${ROOT}" ;;
+    /*) ;;
+    *) PROJECT_DIR="${ROOT}/${PROJECT_DIR}" ;;
+esac
+case "${LOG_DIR}" in
+    "") LOG_DIR="${PROJECT_DIR}/logs/forecast" ;;
+    /*) ;;
+    *) LOG_DIR="${PROJECT_DIR}/${LOG_DIR}" ;;
+esac
+
+# The keepalive's units (gone from the checkout: their links dangle), its timer's link included.
+if [[ -L "${UNIT_DIR}/${KEEPER}.service" || -e "${UNIT_DIR}/${KEEPER}.service.d/local.conf" ]]; then
+    remove_units "${KEEPER}"
+    rm -f "${UNIT_DIR}/timers.target.wants/${KEEPER}.timer"
+    echo "Removed the watchdog's keepalive installed before (${KEEPER}): the alerts replace it."
+fi
+
+if ${UNINSTALL}; then
+    # The alerts first: stopping a collection running fails its unit, which would report it.
+    rm -f "${UNIT_DIR}/${FORECAST}.service.d/local.conf"
+    systemctl --user stop "${ALERT}*.service" 2>/dev/null || true
+    unlink_units "${ALERT}"
+    rm -f "${UNIT_DIR}/${ALERT}.service.d/local.conf"
+    rmdir "${UNIT_DIR}/${ALERT}.service.d" 2>/dev/null || true
+    systemctl --user daemon-reload
+    remove_units "${FORECAST}"
+    systemctl --user daemon-reload
+    echo "Removed the units of ${FORECAST} and ${ALERT}."
+    exit 0
+fi
 
 for UNIT in "${FORECAST}.service" "${FORECAST}.timer" "${ALERT}.service"; do
     if [[ -e "${UNIT_DIR}/${UNIT}" && ! -L "${UNIT_DIR}/${UNIT}" ]]; then
@@ -160,7 +182,7 @@ unlink_units "${ALERT}"
 if ${ALERTS}; then
     ALERT_OPTIONS=()
     if [[ -n "${ALERT_REPO}" ]]; then ALERT_OPTIONS+=(--repo "${ALERT_REPO}"); fi
-    if [[ -n "${LOG_DIR}" ]]; then ALERT_OPTIONS+=(--state-file "${LOG_DIR}/status.json"); fi
+    ALERT_OPTIONS+=(--state-file "${LOG_DIR}/status.json")
     systemctl --user link "${ROOT}/systemd/${ALERT}.service"
     mkdir -p "${UNIT_DIR}/${ALERT}.service.d"
     {

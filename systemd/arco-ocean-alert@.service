@@ -17,4 +17,5 @@ Type=oneshot
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=ALERT_OPTIONS=
 ExecStart=/bin/bash scripts/alert.sh $ALERT_OPTIONS %i
-TimeoutStartSec=5min
+# Up to 6 reports, 5 minutes apart, when GitHub cannot be reached (scripts/alert.sh).
+TimeoutStartSec=40min

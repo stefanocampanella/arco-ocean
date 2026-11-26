@@ -177,7 +177,7 @@ def test_the_settings_apply_before_the_repositories_are_read(tmp_path, files, mo
 
   def summary(path: str) -> dict:
     seen.append(os.environ.get("AWS_PROFILE"))
-    return {"latest_run": None, "runs": None, "flags": {}}
+    return status.RepositorySummary()
 
   monkeypatch.setattr(status, "repository_summary", summary)
   run(state, published, "start", "--target-run", "2026-11-24", "--repo", "1p0=s3://bucket/x")
@@ -337,7 +337,7 @@ def test_overdue_fails_only_a_collection_finished_behind(files) -> None:
   state.parent.mkdir(parents=True)
   for document, code in (
     (finished("2026-11-24"), 0),
-    (finished("2026-11-21"), 1),
+    (finished("2026-11-21"), status.BEHIND_EXIT),
     # Aborted, a collection fails by itself (forecast.sh exits 1).
     (finished("2026-11-21", state="aborted"), 0),
   ):
@@ -364,7 +364,7 @@ def test_the_summary_shows_the_public_content_inert(files) -> None:
   assert "'x' \\| y" in text
   assert "- Started: 2026-11-24 12:00 UTC, last heartbeat: 2026-11-24 12:20 UTC" in text
   assert (
-    "| 0.25° | not_published | 2026-11-24 | 147 | the repository could not be read: OSError |"
+    "| 0.25° | not\\_published | 2026-11-24 | 147 | the repository could not be read: OSError |"
     in text
   )
   # The repositories' paths are not public.
@@ -379,3 +379,55 @@ def test_durations_as_the_page_writes_them() -> None:
   assert status.duration(27 * 60 * minutes) == "1 d 3 h"
   assert status.duration(48 * 60 * minutes) == "2 d"
   assert status.duration(-minutes) == "0 min"
+
+
+def test_a_state_file_not_a_heartbeats_is_replaced_at_start(files) -> None:
+  # Another version's, or damaged: every step would fail on it until removed by hand.
+  state, published = files
+  state.parent.mkdir(parents=True)
+  state.write_text('{"schema": 1, "state": "running", "new_key": true}')
+  result = invoke(state, "beat")
+  assert result.exit_code == 1 and "is not a heartbeat's state" in result.output
+  result = invoke(state, "start", "--target-run", "2026-11-24", published=published)
+  assert result.exit_code == 0, result.output
+  assert "a new one is written" in result.output
+  assert run(state, published, "beat")["state"] == "running"
+
+
+def test_a_run_without_lead_times_has_no_flag_share(tmp_path, files) -> None:
+  # The mean of no lead times is NaN, which JSON writes as null: no flag's value.
+  repo = tmp_path / "res=1p0"
+  forecast_repository(repo, ["2026-11-23"], [True, True, True])
+  stored = status.repository_summary(str(repo))
+  assert stored.flags["ifs_forecast"] == 1.0
+  dataset = xr.Dataset(
+    {"ifs_forecast": (("init_time", "lead_time"), np.full((1, 3), np.nan) > 0)},
+    coords={"init_time": pd.to_datetime(["2026-11-23"]).values, "lead_time": [0, 1, 2]},
+  )
+  empty = tmp_path / "empty"
+  storage = icechunk.Repository.create(icechunk.local_filesystem_storage(str(empty)))
+  session = storage.writable_session("main")
+  dataset.isel(lead_time=slice(0, 0)).to_zarr(session.store, mode="w", consolidated=False)
+  session.commit("no lead times")
+  summary = status.repository_summary(str(empty))
+  assert summary.latest_run == datetime.date(2026, 11, 23) and summary.flags == {}
+  state, published = files
+  run(state, published, "start", "--target-run", "2026-11-24", "--repo", f"1p0={empty}")
+  assert run(state, published, "beat")["resolutions"][0]["flags"] == {}
+
+
+def test_the_schema_requires_every_key_and_utc_times() -> None:
+  schema = status.Heartbeat.model_json_schema(by_alias=True, mode="serialization")
+  assert set(schema["required"]) == set(schema["properties"])
+  resolution = schema["$defs"]["Resolution"]
+  assert set(resolution["required"]) == set(resolution["properties"])
+  assert schema["properties"]["updated_at"]["pattern"].endswith("Z$")
+
+
+def test_plain_text_is_inert_markdown() -> None:
+  assert (
+    status.plain("a\\| [x](y) *b* _c_ ~d~ !e")
+    == "a\\\\\\| \\[x\\]\\(y\\) \\*b\\* \\_c\\_ \\~d\\~ \\!e"
+  )
+  assert status.plain(None) == "–"
+  assert status.plain("two\n lines") == "two lines"

@@ -26,29 +26,49 @@ import dataclasses
 import datetime
 import fcntl
 import json
+import math
 import os
 import pathlib
 import tempfile
 from collections.abc import Callable, Generator
-from typing import Annotated, Any, Literal, get_args
+from typing import Annotated, Literal, get_args
 
 import click
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, PlainSerializer
+from pydantic import (
+  AwareDatetime,
+  BaseModel,
+  ConfigDict,
+  Field,
+  PlainSerializer,
+  ValidationError,
+  WithJsonSchema,
+)
 
 SCHEMA = 1
 CollectionState = Literal["running", "finished", "aborted"]
 ResolutionState = Literal["pending", "downloading", "finished", "not_published", "failed"]
+# The recipes' `[forecast] missing_after`, when a heartbeat gives none (site/status.js's too).
+DEFAULT_MISSING_AFTER_DAYS = 2.0
+# `arco-ocean status overdue`'s exit status for a collection that finished behind.
+BEHIND_EXIT = 3
 # Dimensions of the forecast recipes (arco-make's defaults).
 INIT_DIM = "init_time"
 LEAD_DIM = "lead_time"
 
-# A time in UTC, to the second, as "2026-11-24T12:00:03Z".
+# A time in UTC, to the second, as "2026-11-24T12:00:03Z" (the schema says so: the page reads it).
 Time = Annotated[
   AwareDatetime,
   PlainSerializer(
     lambda value: value.astimezone(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"), return_type=str
   ),
+  WithJsonSchema(
+    {"type": "string", "format": "date-time", "pattern": r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$"}
+  ),
 ]
+# Every key is written, null or not: the schema requires them all.
+MODEL_CONFIG = ConfigDict(
+  extra="forbid", validate_assignment=True, json_schema_serialization_defaults_required=True
+)
 
 
 def now() -> datetime.datetime:
@@ -58,7 +78,7 @@ def now() -> datetime.datetime:
 class Resolution(BaseModel):
   """One resolution of a collection: its download's state and its repository's newest run."""
 
-  model_config = ConfigDict(extra="forbid", validate_assignment=True)
+  model_config = MODEL_CONFIG
 
   res: str = Field(description='The resolution, as in the repository\'s name: "0p25"')
   state: ResolutionState = "pending"
@@ -77,7 +97,7 @@ class Resolution(BaseModel):
 class Heartbeat(BaseModel):
   """The published document."""
 
-  model_config = ConfigDict(extra="forbid", populate_by_name=True, validate_assignment=True)
+  model_config = MODEL_CONFIG | ConfigDict(populate_by_name=True)
 
   schema_version: Literal[1] = Field(SCHEMA, alias="schema")
   state: CollectionState
@@ -113,11 +133,22 @@ def locked(state_file: pathlib.Path) -> Generator[None]:
     yield
 
 
-def load(state_file: pathlib.Path) -> State | None:
+def load(state_file: pathlib.Path, fresh: bool = False) -> State | None:
+  """The state, or None if there is none. A state file that is not a heartbeat's (another
+  version's, damaged) is an error, unless a collection starts anew (`fresh`): it is then replaced,
+  as otherwise every heartbeat would fail until the file is removed by hand."""
   try:
-    return State.model_validate_json(state_file.read_text())
+    text = state_file.read_text()
   except FileNotFoundError:
     return None
+  try:
+    return State.model_validate_json(text)
+  except ValidationError as error:
+    problem = f"{state_file} is not a heartbeat's state ({error.error_count()} errors)"
+    if fresh:
+      click.echo(f"Warning: {problem}: a new one is written.", err=True)
+      return None
+    raise click.ClickException(f"{problem}: the next collection's start replaces it") from error
 
 
 def write_atomically(path: pathlib.Path, text: str) -> None:
@@ -151,26 +182,36 @@ def publish(url: str, body: str) -> None:
   )
 
 
-def repository_summary(path: str) -> dict[str, Any]:
+class RepositorySummary(BaseModel):
+  """What the heartbeat reads from a forecast repository."""
+
+  latest_run: datetime.date | None = None
+  runs: int | None = None
+  flags: dict[str, float] = Field(default_factory=dict)
+
+
+def repository_summary(path: str) -> RepositorySummary:
   """The newest run in the forecast repository at `path` (on `main`), the number of runs, and,
   for each flag variable (bool, init x lead), the share of that run's lead times flagged."""
   import xarray as xr
   from arcomake import icechunk_utils
 
   if not icechunk_utils.is_repository(path):
-    return {"latest_run": None, "runs": None, "flags": {}}
+    return RepositorySummary()
   dataset = xr.open_zarr(icechunk_utils.readonly_store(path), consolidated=False)
   init = dataset[INIT_DIM]
   if init.size == 0:
-    return {"latest_run": None, "runs": 0, "flags": {}}
+    return RepositorySummary(runs=0)
   latest = init.values.max()
-  flags = {
-    str(name): round(float(variable.sel({INIT_DIM: latest}).mean()), 3)
-    for name, variable in dataset.data_vars.items()
-    if variable.dtype == bool and set(variable.dims) == {INIT_DIM, LEAD_DIM}
-  }
+  flags = {}
+  for name, variable in dataset.data_vars.items():
+    if variable.dtype == bool and set(variable.dims) == {INIT_DIM, LEAD_DIM}:
+      share = float(variable.sel({INIT_DIM: latest}).mean())
+      # A run without lead times has no share: NaN would be written as null, which no flag is.
+      if not math.isnan(share):
+        flags[str(name)] = round(share, 3)
   day = datetime.date.fromisoformat(str(latest.astype("datetime64[D]")))
-  return {"latest_run": day, "runs": int(init.size), "flags": flags}
+  return RepositorySummary(latest_run=day, runs=int(init.size), flags=flags)
 
 
 def summarize(entry: Resolution, path: str | None) -> None:
@@ -183,9 +224,9 @@ def summarize(entry: Resolution, path: str | None) -> None:
   except Exception as error:  # noqa: BLE001 (reported in the document)
     entry.error = f"the repository could not be read: {type(error).__name__}"
     return
-  entry.latest_run = summary["latest_run"]
-  entry.runs = summary["runs"]
-  entry.flags = summary["flags"]
+  entry.latest_run = summary.latest_run
+  entry.runs = summary.runs
+  entry.flags = summary.flags
   entry.error = None
 
 
@@ -208,13 +249,15 @@ class Files:
 pass_files = click.make_pass_decorator(Files)
 
 
-def update(files: Files, change: Callable[[State | None], State | None]) -> None:
+def update(
+  files: Files, change: Callable[[State | None], State | None], fresh: bool = False
+) -> None:
   """Apply `change` to the state file, under its lock, then publish the document. A change that
-  returns None leaves both as they are."""
+  returns None leaves both as they are. `fresh`: see `load`."""
   # Before any read: the repositories may be in the bucket (DATA_ROOT, scripts/settings.sh).
   apply_settings()
   with locked(files.state_file):
-    state = change(load(files.state_file))
+    state = change(load(files.state_file, fresh))
     if state is None:
       return
     state.updated_at = now()
@@ -284,14 +327,10 @@ def start(
     previous = {entry.res: entry for entry in state.resolutions} if state else {}
     resolutions = []
     for res, path in repositories.items():
+      # What was known stays (the newest run, the wait) if the repository cannot be read now.
       before = previous.get(res)
-      entry = Resolution(
-        res=res,
-        latest_run=before.latest_run if before else None,
-        runs=before.runs if before else None,
-        flags=before.flags if before else {},
-        waiting_since=before.waiting_since if before else None,
-      )
+      fresh_state = {"state": "pending", "started_at": None, "ended_at": None, "error": None}
+      entry = before.model_copy(update=fresh_state, deep=True) if before else Resolution(res=res)
       summarize(entry, path)
       resolutions.append(entry)
     return State(
@@ -306,7 +345,7 @@ def start(
       repositories=repositories,
     )
 
-  update(files, change)
+  update(files, change, fresh=True)
 
 
 @status.command()
@@ -352,7 +391,11 @@ def resolution(files: Files, res: str, new_state: ResolutionState) -> None:
 
 
 @status.command()
-@click.argument("new_state", metavar="STATE", type=click.Choice(["finished", "aborted"]))
+@click.argument(
+  "new_state",
+  metavar="STATE",
+  type=click.Choice([state for state in get_args(CollectionState) if state != "running"]),
+)
 @click.option("--detail", help="What the page shows next to the state.")
 @pass_files
 def end(files: Files, new_state: CollectionState, detail: str | None) -> None:
@@ -401,7 +444,8 @@ def behind(heartbeat: Heartbeat, at: datetime.datetime) -> list[str]:
   before the newest asked for (runs that old are stored even without a source, flagged), none
   stored, or a resolution waiting for its sources for longer than that (a source that stopped
   publishing keeps it waiting every day, while its older runs are stored without it)."""
-  limit = heartbeat.missing_after_days
+  # As the page: 0 (or none) is its default, two days.
+  limit = heartbeat.missing_after_days or DEFAULT_MISSING_AFTER_DAYS
   reasons = []
   for entry in heartbeat.resolutions:
     label = resolution_label(entry.res)
@@ -419,19 +463,16 @@ def behind(heartbeat: Heartbeat, at: datetime.datetime) -> list[str]:
 
 def plain(value: object) -> str:
   """Text from the heartbeat made inert in Markdown, on one line: no mention, no issue
-  reference, no HTML, no table cell break."""
+  reference, no HTML, no link, emphasis, code or table cell break."""
   text = " ".join(str("–" if value is None else value).split())
-  for old, new in (
-    ("&", "&amp;"),
-    ("<", "&lt;"),
-    (">", "&gt;"),
-    ("@", "@⁠"),
-    ("#", "#⁠"),
-    ("`", "'"),
-    ("|", "\\|"),
-  ):
+  # Backslashes first: they would otherwise undo the escapes below.
+  text = text.replace("\\", "\\\\")
+  for old, new in (("&", "&amp;"), ("<", "&lt;"), (">", "&gt;"), ("`", "'")):
     text = text.replace(old, new)
-  return text
+  for char in "*_[]()~|!":
+    text = text.replace(char, "\\" + char)
+  # A zero-width word joiner after each: no mention of a user, no reference to an issue.
+  return text.replace("@", "@⁠").replace("#", "#⁠")
 
 
 def utc(value: datetime.datetime | None) -> str:
@@ -459,14 +500,18 @@ def summary(heartbeat: Heartbeat) -> str:
 @status.command()
 @pass_files
 def overdue(files: Files) -> None:
-  """Fail if the collection finished behind (see `behind`): forecast.sh then fails, and its
-  alert (scripts/alert.sh) reports it, as the web page shows it stale."""
+  """Exit with 3 if the collection finished behind (see `behind`): forecast.sh then fails, and
+  its alert (scripts/alert.sh) reports it, as the web page shows it stale. 1: the heartbeat cannot
+  tell (no state, or a collection whose end it did not record)."""
   state = started(load(files.state_file), files)
+  if state.state == "running":
+    raise click.ClickException("the heartbeat did not record the collection's end")
   if state.state != "finished":
     return
   reasons = behind(state, now())
   if reasons:
-    raise click.ClickException("the collection finished behind: " + "; ".join(reasons) + ".")
+    click.echo("The collection finished behind: " + "; ".join(reasons) + ".", err=True)
+    raise click.exceptions.Exit(BEHIND_EXIT)
 
 
 @status.command("summary")

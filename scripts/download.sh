@@ -75,7 +75,7 @@ RESUME=false
 EXTEND=false
 ATTEMPTS=3
 RETRY_DELAY=60
-# The image of the arco-make version pinned in pyproject.toml (tests/test_image.py).
+# The image of the arco-make version pinned in pyproject.toml (tests/python/test_image.py).
 IMAGE="oras://ghcr.io/stefanocampanella/arco-make:v0.2.0"
 VENV=""
 ENV_FILE="scripts/.env"

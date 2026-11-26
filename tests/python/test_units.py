@@ -16,11 +16,13 @@ ROOT = pathlib.Path(__file__).parents[2]
 UNITS = sorted((ROOT / "systemd").iterdir())
 
 # Records its arguments, one call per line, and what it reads from a --body-file - in
-# $CALLS.body; gh answers FAKE_ISSUE to the issue list; the token it sees goes to $CALLS.env.
+# $CALLS.body; gh answers FAKE_ISSUE to the issue list (fails with FAKE_GH_FAIL); the token it
+# sees goes to $CALLS.env.
 RECORDER = """#!/usr/bin/env bash
 echo "$(basename "$0") $*" >> "${CALLS}"
 if [[ "$(basename "$0")" == loginctl ]]; then echo "${FAKE_LINGER:-no}"; fi
-if [[ "$(basename "$0")" == gh && "$*" == "issue list "* ]]; then echo "${FAKE_ISSUE:-}"; fi
+if [[ "$(basename "$0")" == gh && -n "${FAKE_GH_FAIL:-}" ]]; then exit 1; fi
+if [[ "$(basename "$0")" == gh && "$*" == "issue list "* ]]; then printf "%b" "${FAKE_ISSUE:-}"; fi
 if [[ "$(basename "$0")" == gh && "$*" == *"--body-file -"* ]]; then cat >> "${CALLS}.body"; fi
 if [[ "$(basename "$0")" == gh && -n "${GH_TOKEN:-}" ]]; then echo "token ${GH_TOKEN}" >> "${CALLS}.env"; fi
 exit 0
@@ -120,7 +122,9 @@ def test_install_links_the_units_and_writes_the_drop_ins(fake: dict[str, str]):
   assert "[Unit]\nOnFailure=arco-ocean-alert@failed.service\n" in forecast
   assert "OnSuccess=arco-ocean-alert@finished.service\n" in forecast
   alert = (unit_dir(fake) / "arco-ocean-alert@.service.d" / "local.conf").read_text()
-  assert f"WorkingDirectory={ROOT}\n" in alert and 'Environment="ALERT_OPTIONS="' in alert
+  assert f"WorkingDirectory={ROOT}\n" in alert
+  # The heartbeat's state file where forecast.sh writes it, whatever the directory systemd starts in.
+  assert f'Environment="ALERT_OPTIONS=--state-file {ROOT}/logs/forecast/status.json"' in alert
   made = calls(fake)
   assert (
     f"systemctl --user link {ROOT}/systemd/arco-ocean-forecast.service"
@@ -145,6 +149,10 @@ def test_install_alert_options(fake: dict[str, str]):
     'Environment="ALERT_OPTIONS=--repo someone/arco-ocean --state-file /var/forecast/status.json"'
     in alert
   )
+  relative = run("install_units.sh", fake, "--alerts", "--", "--project-dir", "elsewhere")
+  assert relative.returncode == 0, relative.stderr
+  alert = (unit_dir(fake) / "arco-ocean-alert@.service.d" / "local.conf").read_text()
+  assert f"--state-file {ROOT}/elsewhere/logs/forecast/status.json" in alert
   bad = run("install_units.sh", fake, "--alerts", "--alert-repo", "a b")
   assert bad.returncode == 1 and "takes OWNER/REPO" in bad.stderr
   alone = run("install_units.sh", fake, "--alert-repo", "someone/arco-ocean")
@@ -180,6 +188,15 @@ def test_install_removes_the_keepalive_of_before(fake: dict[str, str], tmp_path)
   assert "Removed the watchdog's keepalive" in result.stdout
   assert not any(path.name.startswith("arco-ocean-watchdog") for path in units.iterdir())
   assert "systemctl --user disable --now arco-ocean-watchdog-keepalive.timer" in calls(fake)
+
+
+def test_a_refused_install_removes_nothing(fake: dict[str, str], tmp_path):
+  units = unit_dir(fake)
+  units.mkdir(parents=True)
+  (units / "arco-ocean-watchdog-keepalive.service").symlink_to(tmp_path / "gone.service")
+  result = run("install_units.sh", fake, "--alerts", "--alert-repo", "a b")
+  assert result.returncode == 1
+  assert (units / "arco-ocean-watchdog-keepalive.service").is_symlink() and calls(fake) == []
 
 
 def test_install_lingering_needs_no_advice(fake: dict[str, str]):
@@ -221,6 +238,10 @@ def test_uninstall_removes_the_links_and_drop_ins(fake: dict[str, str]):
   assert "systemctl --user disable --now arco-ocean-forecast.timer" in made
   # A collection running is stopped too.
   assert "systemctl --user stop arco-ocean-forecast.service" in made
+  # The alerts go first: a collection stopped fails its unit, which would report it.
+  assert made.index("systemctl --user stop arco-ocean-alert@*.service") < made.index(
+    "systemctl --user stop arco-ocean-forecast.service"
+  )
 
 
 def test_install_from_another_checkout_moves_the_units(fake: dict[str, str], tmp_path):
@@ -281,8 +302,8 @@ def test_a_failure_opens_an_issue(fake: dict[str, str], token: pathlib.Path, tmp
   made = calls(fake)
   repo = "--repo stefanocampanella/arco-ocean"
   assert made[0] == (
-    f"gh issue list {repo} --label forecast-alert --state open --limit 1 --json number"
-    " --jq .[0].number // empty"
+    f"gh issue list {repo} --label forecast-alert --state open --limit 100 --json number"
+    " --jq sort_by(.number) | .[].number"
   )
   assert f"arco-ocean status --state-file {state} summary" in made
   assert any(call.startswith(f"gh label create forecast-alert {repo}") for call in made)
@@ -291,6 +312,7 @@ def test_a_failure_opens_an_issue(fake: dict[str, str], token: pathlib.Path, tmp
     " --body-file -"
   )
   text = body(fake)
+  assert "A download failed, or the heartbeat could not be checked." in text
   assert "systemd's result `exit-code`, exit `exited` `1`" in text
   assert "The heartbeat's summary." in text
   assert "_SYSTEMD_INVOCATION_ID=0123abcd" in text
@@ -307,7 +329,9 @@ def test_a_failure_opens_an_issue(fake: dict[str, str], token: pathlib.Path, tmp
 def test_a_failure_with_an_open_issue_comments_on_it(fake: dict[str, str], token: pathlib.Path):
   # Values systemd would not give are kept to the characters its own have.
   odd = MONITOR | {"MONITOR_EXIT_STATUS": "1`@x <y>"}
-  result = run("alert.sh", fake | odd | {"FAKE_ISSUE": "7"}, "failed")
+  result = run(
+    "alert.sh", fake | odd | {"FAKE_ISSUE": "7"}, "--state-file", "/nowhere/status.json", "failed"
+  )
   assert result.returncode == 0, result.stderr
   made = calls(fake)
   assert made[-1] == "gh issue comment 7 --repo stefanocampanella/arco-ocean --body-file -"
@@ -317,11 +341,19 @@ def test_a_failure_with_an_open_issue_comments_on_it(fake: dict[str, str], token
   assert "The heartbeat's state could not be read." in body(fake)
 
 
-def test_a_success_closes_the_open_issue(fake: dict[str, str], token: pathlib.Path):
-  result = run("alert.sh", fake | {"FAKE_ISSUE": "7"}, "--repo", "someone/x", "finished")
+def test_a_collection_behind_says_so(fake: dict[str, str], token: pathlib.Path):
+  result = run("alert.sh", fake | MONITOR | {"MONITOR_EXIT_STATUS": "3"}, "failed")
   assert result.returncode == 0, result.stderr
-  close = calls(fake)[-1]
-  assert close.startswith("gh issue close 7 --repo someone/x --comment Recovered: a collection")
+  assert "The collection finished behind: a source may have stopped publishing" in body(fake)
+
+
+def test_a_success_closes_the_open_issues(fake: dict[str, str], token: pathlib.Path):
+  # Two open: one opened by hand with the label, say.
+  result = run("alert.sh", fake | {"FAKE_ISSUE": "3\\n7"}, "--repo", "someone/x", "finished")
+  assert result.returncode == 0, result.stderr
+  closes = [call for call in calls(fake) if call.startswith("gh issue close")]
+  assert [call.split()[3] for call in closes] == ["3", "7"]
+  assert closes[0].startswith("gh issue close 3 --repo someone/x --comment Recovered: a collection")
   # Nothing open: nothing to do.
   pathlib.Path(fake["CALLS"]).unlink()
   quiet = run("alert.sh", fake, "finished")
@@ -351,6 +383,17 @@ def test_alert_needs_a_private_token_file(fake: dict[str, str], token: pathlib.P
   empty = run("alert.sh", fake, "failed")
   assert empty.returncode == 1 and "is empty" in empty.stderr
   assert calls(fake) == []
+
+
+def test_a_report_github_refuses_is_tried_again(fake: dict[str, str], token: pathlib.Path):
+  result = run(
+    "alert.sh", fake | MONITOR | {"FAKE_GH_FAIL": "1"}, "--attempts", "3", "--retry-delay", "0",
+    "failed",
+  )  # fmt: skip
+  assert result.returncode == 1 and "the report failed 3 times" in result.stderr
+  assert [call.split()[:3] for call in calls(fake)] == [["gh", "issue", "list"]] * 3
+  bad = run("alert.sh", fake, "--attempts", "0", "failed")
+  assert bad.returncode == 1 and "--attempts takes a positive number" in bad.stderr
 
 
 def test_alert_follows_a_linked_token_file(fake: dict[str, str], token: pathlib.Path):

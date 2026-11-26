@@ -1,7 +1,8 @@
 # SPDX-FileCopyrightText: 2026 Stefano Campanella
 # SPDX-License-Identifier: MIT
-# The pre-commit checks (.pre-commit-config.yaml): TOML and YAML syntax, ruff, ShellCheck, REUSE,
-# secrets. Lint, types and tests of the package: ci.yml.
+# The pre-commit checks (.pre-commit-config.yaml): TOML and YAML syntax, marimo, the web page's
+# tests, ShellCheck, REUSE, secrets. ruff and ty run in ci.yml's lint job, with the project's
+# environment: skipped here, which needs none.
 name: checks
 
 on:
@@ -24,3 +25,5 @@ jobs:
         with:
           python-version: "3.13"
       - run: uvx pre-commit run --all-files --show-diff-on-failure
+        env:
+          SKIP: ruff-check,ruff-format,ty-check
