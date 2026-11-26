@@ -1,0 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Stefano Campanella
+# SPDX-License-Identifier: MIT
+# ShellCheck (pre-commit): `source` paths in directives are from the script's own directory.
+source-path=SCRIPTDIR
+external-sources=true

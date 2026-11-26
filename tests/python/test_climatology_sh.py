@@ -20,7 +20,8 @@ echo "$*" >> "${CALLS}"
 @pytest.fixture
 def project(tmp_path: pathlib.Path) -> pathlib.Path:
   (tmp_path / "scripts").mkdir()
-  for name in ("climatology.sh", "settings.sh"):
+  shutil.copytree(SCRIPTS / "lib", tmp_path / "scripts" / "lib")
+  for name in ("climatology.sh",):
     shutil.copy(SCRIPTS / name, tmp_path / "scripts" / name)
   (tmp_path / "configs" / "climatology").mkdir(parents=True)
   (tmp_path / "configs" / "climatology" / "historical_res-1p0.toml").write_text("")

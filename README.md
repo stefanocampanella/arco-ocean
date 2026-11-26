@@ -140,7 +140,7 @@ scripts/climatology.sh --bind /data historical_res-0p25
 The outputs are `DATA_ROOT/<product>/res=<res>`, the bucket's layout with
 `DATA_ROOT=s3://ogs-arco-ocean`. `DATA_ROOT` comes from the scripts' `--data-root`, the
 environment, the scripts' settings file, `scripts/.env` (`$SCRATCH/arco-ocean` on clusters that
-have one), else the project's `data/` (`scripts/settings.sh`); `--output` names one output
+have one), else the project's `data/` (`scripts/lib/common.sh`); `--output` names one output
 instead. The settings file, `~/.config/arco-ocean/settings` (`ARCO_OCEAN_SETTINGS` names another,
 empty disables it), is read by the units too:
 

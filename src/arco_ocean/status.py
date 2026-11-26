@@ -254,7 +254,7 @@ def update(
 ) -> None:
   """Apply `change` to the state file, under its lock, then publish the document. A change that
   returns None leaves both as they are. `fresh`: see `load`."""
-  # Before any read: the repositories may be in the bucket (DATA_ROOT, scripts/settings.sh).
+  # Before any read: the repositories may be in the bucket (DATA_ROOT, scripts/lib/common.sh).
   apply_settings()
   with locked(files.state_file):
     state = change(load(files.state_file, fresh))

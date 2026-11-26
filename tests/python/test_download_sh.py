@@ -29,7 +29,8 @@ pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="needs Linux (da
 @pytest.fixture
 def project(tmp_path: pathlib.Path) -> pathlib.Path:
   (tmp_path / "scripts").mkdir()
-  for name in ("download.sh", "settings.sh"):
+  shutil.copytree(SCRIPTS / "lib", tmp_path / "scripts" / "lib")
+  for name in ("download.sh",):
     shutil.copy(SCRIPTS / name, tmp_path / "scripts" / name)
   (tmp_path / "configs" / "download").mkdir(parents=True)
   (tmp_path / "configs" / "download" / "forecast_res-1p0.toml").write_text("")

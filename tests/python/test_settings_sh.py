@@ -9,7 +9,7 @@ import subprocess
 
 import pytest
 
-SETTINGS = pathlib.Path(__file__).parents[2] / "scripts" / "settings.sh"
+SETTINGS = pathlib.Path(__file__).parents[2] / "scripts" / "lib" / "common.sh"
 
 
 def resolve(

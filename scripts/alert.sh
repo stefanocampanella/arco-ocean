@@ -20,6 +20,10 @@
 # It needs gh (GitHub CLI) and a token in a file only its owner can read: a fine-grained personal
 # access token for the repository alone, with the permission "Issues: Read and write".
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "${SCRIPT_DIR}/lib/common.sh" || { echo "Error: ${SCRIPT_DIR}/lib/common.sh is missing." >&2; exit 1; }
+
 usage() {
     cat <<EOF
 alert.sh
@@ -82,10 +86,7 @@ if ! [[ "${ATTEMPTS}" =~ ^[1-9][0-9]*$ && "${RETRY_DELAY}" =~ ^[0-9]+$ ]]; then
     echo "Error: --attempts takes a positive number, --retry-delay a number of seconds." >&2
     exit 1
 fi
-if [[ ! "${REPO}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
-    echo "Error: --repo takes OWNER/REPO (got '${REPO}')." >&2
-    exit 1
-fi
+github_repo --repo "${REPO}"
 if ! command -v gh >/dev/null 2>&1; then
     echo "Error: gh (GitHub CLI) is needed." >&2
     exit 1
@@ -121,8 +122,7 @@ if [[ -z "${ALERT_ATTEMPT:-}" ]]; then
     exit 1
 fi
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-STATE_FILE="${STATE_FILE:-${ROOT}/logs/forecast/status.json}"
+STATE_FILE="${STATE_FILE:-${CHECKOUT}/logs/forecast/status.json}"
 LABEL="forecast-alert"
 UNIT="arco-ocean-forecast"
 NOW="$(date -u '+%Y-%m-%d %H:%M UTC')"
@@ -141,14 +141,8 @@ monitor() {
 
 # The heartbeat's public content (arco-ocean status summary, as forecast.sh runs it).
 heartbeat() {
-    local COMMAND
-    if [[ -n "${ARCO_OCEAN_CLI:-}" ]]; then
-        COMMAND=("${ARCO_OCEAN_CLI}")
-    else
-        COMMAND=(env -u PYTHONPATH -u PYTHONHOME
-            uv run --quiet --frozen --no-default-groups --project "${ROOT}" arco-ocean)
-    fi
-    if [[ -f "${STATE_FILE}" ]] && "${COMMAND[@]}" status --state-file "${STATE_FILE}" summary 2>/dev/null; then
+    arco_ocean_command
+    if [[ -f "${STATE_FILE}" ]] && "${ARCO_OCEAN[@]}" status --state-file "${STATE_FILE}" summary 2>/dev/null; then
         return 0
     fi
     echo "The heartbeat's state could not be read."
