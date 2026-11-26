@@ -1,7 +1,8 @@
 # SPDX-FileCopyrightText: 2026 Stefano Campanella
 # SPDX-License-Identifier: MIT
-# The ARCO-OCEAN site (mystmd, the engine of Jupyter Book 2): `myst start` previews it, `myst build
-# --html` writes it to _build/html (the Development page). The pages are this folder's.
+# The ARCO-OCEAN site (mystmd, the engine of Jupyter Book 2): scripts/site.sh builds it (`build`)
+# or previews it (`start`), after exporting the notebooks to notebooks/ here (not committed).
+# The pages are this folder's.
 version: 1
 project:
   title: ARCO-OCEAN
@@ -24,9 +25,10 @@ project:
     - file: coarsen-ocean-datasets.md
     - file: producing.md
     - file: forecasts.md
+    # Every notebook site.sh exports.
     - title: Notebooks
       children:
-        - file: notebooks/oni.ipynb
+        - pattern: notebooks/*.ipynb
     - file: licence.md
     - file: development.md
 site:
