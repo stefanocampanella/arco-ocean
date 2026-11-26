@@ -26,12 +26,13 @@ __generated_with = "0.25.2"
 app = marimo.App(width="medium")
 
 with app.setup:
+    import argparse
     import concurrent.futures
     import hashlib
-    import os
     import pathlib
     import shutil
     import subprocess
+    import sys
 
     import marimo as mo
     import numpy as np
@@ -70,10 +71,11 @@ def _():
     Roadmap item 5: an animation for the Earthmover marketplace listing and the documentation. This
     was a proposal; the maintainer chose its content and text on 23 Nov (Decisions, below).
 
-    *The animation is the README's cover
-    (`docs/assets/images/arco-ocean.webp`), made on 25 Nov by this notebook (How it is made, below).
-    Generated using E.U. Copernicus Marine Service Information
-    ([10.48670/moi-00021](https://doi.org/10.48670/moi-00021)).*
+    ![The globe on 1 January 2023: sea surface temperature and sea ice from ARCO-OCEAN](../assets/images/arco-ocean.png)
+
+    *The first frame; [the animation](../assets/images/arco-ocean.webp) (8 MB), the README's cover, was made
+    on 25 Nov by this notebook (How it is made, below). Generated using E.U. Copernicus Marine
+    Service Information ([10.48670/moi-00021](https://doi.org/10.48670/moi-00021)).*
 
     ## What it shows
 
@@ -183,28 +185,6 @@ def _():
     latitude, the temperature and ice there interpolated bilinearly between the sea cells (across the
     antimeridian too), 2 x 2 samples per pixel; cartopy draws the coastlines over it.
     """)
-    return
-
-
-@app.cell
-def _():
-    # Run with the arguments after `--` (Running it, above); nothing without --source.
-    _args = mo.cli_args()
-    mo.stop(
-        "source" not in _args,
-        mo.md("_Run with `uv run notebooks/animation.py -- --source SOURCE --outdir OUTDIR`._"),
-    )
-    render(
-        str(_args["source"]),
-        pathlib.Path(str(_args["outdir"])),
-        zarr="zarr" in _args,
-        region=str(_args.get("region", "eu-south-1")),
-        year=int(_args.get("year", 2023)),
-        start_lon=float(_args.get("start-lon", -150.0)),
-        frames_per_day=int(_args.get("frames-per-day", FRAMES_PER_DAY)),
-        preview_size=int(_args.get("preview-size", 480)),
-        processes=int(_args["processes"]) if "processes" in _args else os.cpu_count(),
-    )
     return
 
 
@@ -344,7 +324,7 @@ def globe(sst: np.ndarray, ice: np.ndarray, grid: tuple, lon0: float, size: int)
   pixels = premultiplied.reshape(size, SUPERSAMPLE, size, SUPERSAMPLE, 4).mean(axis=(1, 3))
   opacity = pixels[..., 3:]
   pixels[..., :3] = np.divide(pixels[..., :3], opacity, out=np.zeros_like(pixels[..., :3]),
-                              where=opacity > 0)  # fmt: skip
+                              where=opacity > 0)
   return np.clip(pixels, 0, 1)
 
 
@@ -456,12 +436,12 @@ def render(
     [*common, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20", "-movflags", "+faststart",
      str(outdir / "arco-ocean.mp4")],
     check=True,
-  )  # fmt: skip
+  )
   subprocess.run(
     [*common, "-c:v", "libvpx-vp9", "-pix_fmt", "yuv420p", "-b:v", "0", "-crf", "34",
      "-row-mt", "1", str(outdir / "arco-ocean.webm")],
     check=True,
-  )  # fmt: skip
+  )
   size = (preview_size, preview_size)
   images = [Image.open(path).convert("RGB").resize(size, Image.LANCZOS) for path in paths]
   images[0].save(
@@ -482,6 +462,48 @@ def render(
   icon.save(outdir / "arco-ocean.png", optimize=True)
   for name in ("arco-ocean.mp4", "arco-ocean.webm", "arco-ocean.webp", "arco-ocean.png"):
     print(name, (outdir / name).stat().st_size // 1024, "KiB")
+
+
+@app.function
+def arguments(argv: list[str]) -> argparse.Namespace:
+  """The options of a run (Running it, above), as the script's were: SOURCE and OUTDIR required,
+  numbers checked, unknown options refused, --help. Options not given are left out, so that
+  render's defaults apply."""
+  parser = argparse.ArgumentParser(
+    prog="uv run notebooks/animation.py --",
+    description="The ARCO-OCEAN animation: a year of sea surface temperature and sea ice.",
+    argument_default=argparse.SUPPRESS,
+  )
+  parser.add_argument("--source", required=True, help="the dataset (Running it, above)")
+  parser.add_argument("--outdir", required=True, type=pathlib.Path)
+  parser.add_argument("--zarr", action="store_true", help="SOURCE is a plain Zarr store")
+  parser.add_argument("--region", help="the S3 bucket's region (default: eu-south-1)")
+  parser.add_argument("--year", type=int, help="default: 2023")
+  parser.add_argument(
+    "--start-lon", dest="start_lon", type=float, help="the first frame's centre (default: -150)"
+  )
+  parser.add_argument(
+    "--frames-per-day",
+    dest="frames_per_day",
+    type=int,
+    help="the day's frame, then the day blended with the next (default: 2)",
+  )
+  parser.add_argument("--preview-size", dest="preview_size", type=int, help="default: 480")
+  parser.add_argument("--processes", type=int, help="default: the CPUs")
+  return parser.parse_args(argv)
+
+
+@app.cell
+def _():
+    # Made when run as a script, with the arguments after `--`; not in `marimo edit`, where
+    # every change to a function would start the render again (minutes, OUTDIR/frames emptied).
+    mo.stop(
+        mo.app_meta().mode != "script",
+        mo.md("_Made by `uv run notebooks/animation.py -- --source SOURCE --outdir OUTDIR`._"),
+    )
+    _argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else sys.argv[1:]
+    render(**vars(arguments(_argv)))
+    return
 
 
 if __name__ == "__main__":
