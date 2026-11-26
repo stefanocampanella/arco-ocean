@@ -52,7 +52,12 @@ DESCRIPTION
     scripts/download.sh, as given. Outputs are DATA_ROOT/forecast/res=<res>: --data-root ROOT
     gives it, else scripts/settings.sh (resolved once, and given to every download); the
     heartbeat reads them there. The heartbeat is "arco-ocean status", run with uv in this
-    checkout's environment (ARCO_OCEAN_CLI names another arco-ocean command).
+    checkout's environment (ARCO_OCEAN_CLI names another arco-ocean command): it reads the
+    repositories with the arco-make pinned there, the default image's; with another --image or
+    --virtual-env, keep the two in step.
+
+    Exit status: 0 every run stored; 75 a source has not published the newest run yet (the
+    runs before are stored); 3 the collection finished behind (see the heartbeat); 1 otherwise.
 
     Examples:
         $0 --start 2026-07-01                 # the first time: backfill to today's run
@@ -120,8 +125,9 @@ if ! [[ "${HEARTBEAT}" =~ ^[1-9][0-9]*$ ]]; then
     echo "Error: --heartbeat takes a positive number of seconds (got '${HEARTBEAT}')." >&2
     exit 1
 fi
-if ! [[ "${MISSING_AFTER}" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
-    echo "Error: --missing-after takes a number of days (got '${MISSING_AFTER}')." >&2
+# Positive: the page and the heartbeat read 0 as their default, two days.
+if ! [[ "${MISSING_AFTER}" =~ ^[0-9]+([.][0-9]+)?$ ]] || [[ "${MISSING_AFTER}" =~ ^0+([.]0+)?$ ]]; then
+    echo "Error: --missing-after takes a positive number of days (got '${MISSING_AFTER}')." >&2
     exit 1
 fi
 if ! [[ "${STALE_AFTER}" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
@@ -161,7 +167,9 @@ ENDED=false
 if [[ -n "${ARCO_OCEAN_CLI:-}" ]]; then
     ARCO_OCEAN=("${ARCO_OCEAN_CLI}")
 else
-    ARCO_OCEAN=(uv run --quiet --frozen --no-default-groups --project "${SCRIPT_DIR}/.." arco-ocean)
+    # Isolated from the caller's Python settings, as `python -I` was: its arco-make is the lock's.
+    ARCO_OCEAN=(env -u PYTHONPATH -u PYTHONHOME
+        uv run --quiet --frozen --no-default-groups --project "${SCRIPT_DIR}/.." arco-ocean)
 fi
 
 # Update the heartbeat (no-op without --status-url). It never stops the collection: a failure is
@@ -247,6 +255,25 @@ for RES in "${RES_LIST[@]}"; do
     fi
 done
 
+# A collection that ended with the runs stored, but behind (a source that stopped publishing: its
+# runs are stored without it, days late, or wait every day; see `arco-ocean status overdue`),
+# fails: the unit's alert (scripts/alert.sh) reports it, as the page shows it stale.
+# `arco-ocean status overdue`'s exit status for a collection that finished behind; forecast.sh
+# exits with it too, so that the alert tells it from other failures.
+BEHIND=3
+overdue() {
+    [[ -n "${STATUS_URL}" ]] || return 0
+    local CODE=0
+    "${ARCO_OCEAN[@]}" status --state-file "${STATUS_FILE}" overdue || CODE=$?
+    if [[ ${CODE} -eq ${BEHIND} ]]; then
+        echo "Forecast collection behind (see the heartbeat): reported as a failure." >&2
+        exit "${BEHIND}"
+    elif [[ ${CODE} -ne 0 ]]; then
+        echo "The heartbeat could not tell whether the collection is behind: reported as a failure." >&2
+        exit 1
+    fi
+}
+
 ENDED=true
 if [[ ${#FAILED[@]} -gt 0 ]]; then
     status end aborted --detail "The download failed at ${FAILED[*]}: the next collection resumes it."
@@ -256,8 +283,10 @@ fi
 if [[ ${#WAITING[@]} -gt 0 ]]; then
     status end finished --detail "A source has not published the newest run yet (${WAITING[*]}): the next collection adds it."
     echo "Forecast collection: the newest run is not published yet at ${WAITING[*]}; the next run catches up." >&2
+    overdue
     # Not a failure (the unit counts it a success), but not every run stored: 75, as download.sh.
     exit 75
 fi
 status end finished
+overdue
 echo "Forecast collection done ($(date -u))."

@@ -5,7 +5,7 @@
 Needs the network and the services' credentials (Copernicus Marine, EWDS; ERA5 is public), and
 an ecCodes recent enough for GloFAS GRIB (arco-make's `live` extra: `uv run --with eccodeslib`). Memory: about 30 GB at 0.25 deg.
 
-  uv run python docs/coarsen_analysis.py measure 0.25 out-0p25.json
+  uv run --with eccodeslib python docs/coarsen_analysis.py measure 0.25 out-0p25.json
   uv run python docs/coarsen_analysis.py tables out-0p25.json out-0p5.json out-1p0.json
 
 `measure` writes the numbers of each section (`--sections`, default all) to a JSON file;

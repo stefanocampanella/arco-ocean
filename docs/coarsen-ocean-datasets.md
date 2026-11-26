@@ -5,13 +5,13 @@ model (GLORYS12), its sea ice, and river discharge (GloFAS) to coarser regular g
 the published fields mean. Written for ARCO-OCEAN (0.25°, 0.5° and 1° from GLORYS's 1/12°),
 whose recipes are in `configs/download`; the steps are generic (arco-make's `docs/steps.md`).
 
-Every statement with a number is backed by code, run with arco-make (the `notes` dependency
-group, `uv sync --only-group notes`):
+Every statement with a number is backed by code, run with arco-make (the project's
+environment, `uv sync`):
 
 - the examples below (```` ```pycon ````) are doctests on synthetic data, run by
-  `tests/test_coarsening_notes.py` (`uv run --only-group notes pytest tests`, and in CI);
+  `tests/python/test_coarsening_notes.py` (`uv run pytest`, and in CI);
 - the examples marked ```` ```pycon live ```` read the real sources on small boxes, with
-  Copernicus Marine credentials (`uv run --only-group notes pytest --live tests`);
+  Copernicus Marine credentials (`uv run pytest --live`);
 - the global figures come from `docs/coarsen_analysis.py`, run at each resolution (section
   [Measurements](#measurements)); its numbers are those of the days it reads.
 
