@@ -5,8 +5,8 @@
 // status` writes it; `arco-ocean heartbeat-schema` prints the document's schema), and the
 // dashboard that shows it, a MyST `{anywidget}` (docs/index.md). One module: the directive copies
 // this file alone, so it imports nothing. The judgement is pure functions, tested by
-// tests/js/forecast.test.js; the widget reads the heartbeat every minute. The widget's JSON gives
-// `status_url`; `?status=URL` in the page's address reads another heartbeat (a test copy, say).
+// tests/js/forecast.test.js; the widget reads the heartbeat every minute.
+// `?status=URL` in the page's address reads another heartbeat (a test copy, say).
 // Nothing here runs on import: Node's tests import it without a page.
 
 export const DEFAULT_STATUS_URL =
@@ -282,22 +282,40 @@ export function show(el, heartbeat, now) {
   field("checked").textContent = utc(new Date(now).toISOString());
 }
 
-// The heartbeat's URL: the page's ?status=, else the widget's, else the bucket's.
-export function statusUrl(search, given) {
-  return new URLSearchParams(search).get("status") || given || DEFAULT_STATUS_URL;
+// The heartbeat's URL: the page's ?status=, else the bucket's (written once, here).
+export function statusUrl(search) {
+  return new URLSearchParams(search).get("status") || DEFAULT_STATUS_URL;
 }
 
-function render({ model, el }) {
+function render({ el }) {
   // Appended, not el.innerHTML: the page's renderer puts the widget's stylesheet in el.
   const root = document.createElement("div");
   root.innerHTML = MARKUP;
   el.append(root);
-  const url = statusUrl(window.location.search, model.get("status_url"));
-  const refresh = async () => show(root, await fetchHeartbeat(url), Date.now());
+  const url = statusUrl(window.location.search);
+  // Only the newest refresh shows: a slow answer does not overwrite a later one.
+  let latest = 0;
+  let stopped = false;
+  const refresh = async () => {
+    const mine = ++latest;
+    const heartbeat = await fetchHeartbeat(url);
+    if (stopped || mine !== latest) return;
+    try {
+      show(root, heartbeat, Date.now());
+    } catch (error) {
+      // A document it cannot show: said so, not left at "Checking…".
+      show(root, null, Date.now());
+      console.error("forecast dashboard:", error);
+    }
+  };
   refresh();
   const timer = setInterval(refresh, REFRESH_MS);
-  // Called when the widget leaves the page.
-  return () => clearInterval(timer);
+  // Called when the widget leaves the page (or is rendered again): nothing left behind.
+  return () => {
+    stopped = true;
+    clearInterval(timer);
+    root.remove();
+  };
 }
 
 export default { render };

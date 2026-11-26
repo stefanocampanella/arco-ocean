@@ -47,7 +47,8 @@ from pydantic import (
 SCHEMA = 1
 CollectionState = Literal["running", "finished", "aborted"]
 ResolutionState = Literal["pending", "downloading", "finished", "not_published", "failed"]
-# The recipes' `[forecast] missing_after`, when a heartbeat gives none (docs/assets/js/forecast.js's too).
+# The recipes' `[forecast] missing_after`, when a heartbeat gives none (the web page's too:
+# docs/assets/js/forecast.js).
 DEFAULT_MISSING_AFTER_DAYS = 2.0
 # `arco-ocean status overdue`'s exit status for a collection that finished behind.
 BEHIND_EXIT = 3
@@ -440,7 +441,8 @@ def duration(delta: datetime.timedelta) -> str:
 
 def behind(heartbeat: Heartbeat, at: datetime.datetime) -> list[str]:
   """Why the resolutions of a collection are behind, as the web page judges a finished one
-  (`behind` in docs/assets/js/forecast.js): a newest stored run older than the recipes' `missing_after`
+  (`behind` in docs/assets/js/forecast.js): a newest stored run older than the recipes'
+  `missing_after`
   before the newest asked for (runs that old are stored even without a source, flagged), none
   stored, or a resolution waiting for its sources for longer than that (a source that stopped
   publishing keeps it waiting every day, while its older runs are stored without it)."""

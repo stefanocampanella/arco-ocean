@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  DEFAULT_STATUS_URL,
   assess,
   componentLabel,
   duration,
@@ -14,6 +15,7 @@ import {
   lagDays,
   resolutionLabel,
   runAgeDays,
+  statusUrl,
   utc,
 } from "../../docs/assets/js/forecast.js";
 // A heartbeat as `arco-ocean status` publishes it (tests/python/test_js_fixtures.py checks it
@@ -166,4 +168,28 @@ test("the newest run's age, in days", () => {
   assert.equal(runAgeDays("2026-11-24", NOW), 0);
   assert.equal(runAgeDays("2026-11-21", NOW), 3);
   assert.equal(runAgeDays(null, NOW), null);
+});
+
+test("a heartbeat without its limits is judged with the defaults", () => {
+  // Older documents had no missing_after_days: two days; no stale_after_hours: 30 hours.
+  const finished = (latest, ended) =>
+    heartbeat({
+      state: "finished",
+      ended_at: ended,
+      missing_after_days: undefined,
+      stale_after_hours: undefined,
+      resolutions: [{ ...running.resolutions[0], latest_run: latest }],
+    });
+  assert.equal(assess(finished("2026-11-22", "2026-11-24T12:20:00Z"), NOW).status, "finished");
+  assert.equal(assess(finished("2026-11-21", "2026-11-24T12:20:00Z"), NOW).status, "stale");
+  // 30 hours after it ended, with no collection finished since.
+  const later = Date.parse("2026-11-25T18:30:00Z");
+  assert.equal(assess(finished("2026-11-24", "2026-11-24T12:20:00Z"), later).status, "stale");
+  assert.equal(assess(finished("2026-11-24", "2026-11-24T12:31:00Z"), later).status, "finished");
+});
+
+test("the heartbeat's URL: the page's ?status=, else the bucket's", () => {
+  assert.equal(statusUrl(""), DEFAULT_STATUS_URL);
+  assert.equal(statusUrl("?status=/test.json"), "/test.json");
+  assert.equal(statusUrl("?other=1&status="), DEFAULT_STATUS_URL);
 });

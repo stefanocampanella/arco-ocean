@@ -24,20 +24,7 @@ from `docs/`:
 
 ## Quick start
 
-```python
-import icechunk
-import xarray as xr
-
-storage = icechunk.s3_storage(
-  bucket="ogs-arco-ocean",
-  prefix="historical/res=0p25",
-  region="eu-south-1",
-  anonymous=True,
-  network_stream_timeout_seconds=20,
-)
-repo = icechunk.Repository.open(storage)
-dataset = xr.open_zarr(repo.readonly_session("main").store, consolidated=False)
-```
+The repositories open with `xarray` and `icechunk`, without credentials: [Data access](docs/access.md) shows how.
 
 To work on this repository: `uv sync` (the package and the checks), `git submodule update --init`
 (the scripts' tests), `uvx pre-commit install` ([Development](docs/development.md)).

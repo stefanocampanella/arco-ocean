@@ -1,7 +1,6 @@
 ---
 title: ARCO-OCEAN
 subtitle: The ocean and sea ice with their atmospheric forcing, analysis-ready and cloud-optimized, for machine learning
-license: CC-BY-4.0
 ---
 
 ARCO-OCEAN gives the ocean state and its forcing on regular latitude-longitude grids at 0.25°,
@@ -12,14 +11,15 @@ Daily forecasts of the same variables, from the operational systems of the same 
 continue it. It is stored as [Icechunk](https://icechunk.io/) repositories on AWS S3, readable
 without credentials ([Data access](access.md)).
 
-:::{figure} assets/images/arco-ocean.webp
-:alt: A globe turning through 2023: sea surface temperature and sea ice from ARCO-OCEAN
+:::{figure} assets/images/arco-ocean.png
+:alt: The globe on 1 January 2023: sea surface temperature and sea ice from ARCO-OCEAN
 :width: 480px
 :align: center
 
-Sea surface temperature (`thetao`, top level) and sea ice (`siconc`, white) of 2023 at 0.25°, day
-by day. Generated using E.U. Copernicus Marine Service Information
-([10.48670/moi-00021](https://doi.org/10.48670/moi-00021)).
+Sea surface temperature (`thetao`, top level) and sea ice (`siconc`, white) on 1 January 2023 at
+0.25°; [the globe turning through the year](assets/images/arco-ocean.webp), day by day (8 MB,
+on request: no motion nor download unless asked for). Generated using E.U. Copernicus Marine
+Service Information ([10.48670/moi-00021](https://doi.org/10.48670/moi-00021)).
 :::
 
 The availability of standard datasets and benchmarks has been a key factor in the development
@@ -50,7 +50,7 @@ resolution. Its state is read from the heartbeat it publishes while it runs.
 
 :::{anywidget} assets/js/forecast.js
 :css: assets/js/forecast.css
-{ "status_url": "https://ogs-arco-ocean.s3.eu-south-1.amazonaws.com/status/forecast.json" }
+{}
 :::
 
 States: **downloading** (heartbeat recent), **finished**, **aborted** (the collection failed;
@@ -74,3 +74,6 @@ newest run's lead times that each component's run gives; the rest comes from lat
 - [Development](development.md): the checks, this site, the use of AI tools.
 - [arco-make](https://github.com/stefanocampanella/arco-make), the program that builds
   ARCO-OCEAN from its recipes (`configs/`).
+
+Neither the European Commission nor ECMWF nor Mercator Ocean International is responsible for any
+use that may be made of the Copernicus information or data ARCO-OCEAN contains.

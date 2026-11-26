@@ -16,10 +16,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: pages-${{ github.ref }}
-  cancel-in-progress: false
-
 env:
   # The versions of the build, as the checks run Node.js (.pre-commit-config.yaml).
   MYSTMD: mystmd==1.14.0
@@ -41,9 +37,13 @@ jobs:
         with:
           path: docs/_build/html
 
+  # From main only, one at a time.
   deploy:
-    if: github.event_name != 'pull_request'
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: build
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     permissions:
       pages: write

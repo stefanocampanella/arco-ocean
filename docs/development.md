@@ -1,7 +1,3 @@
----
-license: CC-BY-4.0
----
-
 # Development
 
 The repository holds the recipes (`configs/`), the scripts that run them (`scripts/`, bash),
@@ -39,7 +35,7 @@ written once, here; the README points to these pages. To preview it:
 
 ```bash
 cd docs
-uvx --from mystmd --with nodejs-wheel myst start   # http://localhost:3000
+uvx --from mystmd==1.14.0 --with nodejs-wheel==24.19.0 myst start   # the versions CI builds with
 ```
 
 The forecast collection's state on the home page is a MyST `{anywidget}`,
