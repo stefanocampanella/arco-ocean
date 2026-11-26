@@ -206,7 +206,7 @@ def test_a_failed_download_and_an_unreadable_repository(tmp_path, files, monkeyp
 def test_steps_need_a_started_download(files) -> None:
   state, published = files
   result = invoke(state, published, "beat")
-  assert result.exit_code == 1 and "no download started" in result.output
+  assert result.exit_code == 1 and "no run started" in result.output
   result = invoke(state, published, "end", "running")
   assert result.exit_code == 2
 
@@ -230,3 +230,58 @@ def test_the_schema_describes_the_published_document() -> None:
   assert set(schema["properties"]).isdisjoint(progress.PRIVATE)
   assert set(schema["required"]) == set(schema["properties"])
   assert schema["properties"]["state"]["enum"] == ["running", "finished", "failed"]
+
+
+def test_the_statistics_have_a_state_not_a_progress(tmp_path, files) -> None:
+  state, published = files
+  repo = tmp_path / "statistics" / "res=1p0"
+  document = run(
+    state, published, "start", "--kind", "statistics", "--name", "historical_res-1p0",
+    "--repo", str(repo),
+  )  # fmt: skip
+  assert (document["kind"], document["state"]) == ("statistics", "running")
+  assert (document["start"], document["end"], document["done_until"]) == (None, None, None)
+  # Written in one commit at the end: nothing to read while they run.
+  complete(repo, ("1993-01-01", "1993-02-02"))
+  document = run(state, published, "beat")
+  assert (document["done_until"], document["last_commit_at"]) == (None, None)
+  document = run(state, published, "end", "finished")
+  assert document["state"] == "finished" and document["last_commit_at"].endswith("Z")
+  assert document["done_until"] is None
+
+
+def test_the_kinds_take_their_dates(files) -> None:
+  state, published = files
+  result = invoke(state, published, "start", "--name", "n", "--repo", "/x")
+  assert result.exit_code == 2 and "a download needs --end" in result.output
+  result = invoke(
+    state, published, "start", "--kind", "statistics", "--name", "n", "--repo", "/x",
+    "--end", "1993-06-01",
+  )  # fmt: skip
+  assert result.exit_code == 2 and "the statistics take no --start nor --end" in result.output
+
+
+def test_the_summary_for_an_issue(tmp_path, files) -> None:
+  state, published = files
+  run(
+    state, published, "start", "--name", "historical_res-0p25", "--repo", str(tmp_path / "r"),
+    "--start", "1993-01-01", "--end", "2026-07-01",
+  )  # fmt: skip
+  run(state, published, "end", "failed", "--detail", "Stopped (exit status 1) <b>@team</b>.")
+  result = invoke(state, published, "summary")
+  assert result.exit_code == 0, result.output
+  assert result.output.startswith(r"**Download historical\_res-0p25: failed.** Stopped")
+  # Inert in Markdown, and no path of the machine.
+  assert "<b>" not in result.output and str(tmp_path) not in result.output
+  assert (
+    "- Period: 1993-01-01 to 2026-07-01 (excluded), stored up to: – (excluded)" in result.output
+  )
+  statistics = state.with_name("statistics.json")
+  CliRunner().invoke(
+    cli,
+    ["progress", "--state-file", str(statistics), "start", "--kind", "statistics",
+     "--name", "historical_res-1p0", "--repo", "/x"],
+  )  # fmt: skip
+  result = CliRunner().invoke(cli, ["progress", "--state-file", str(statistics), "summary"])
+  assert result.output.startswith(r"**Statistics historical\_res-1p0: running.**")
+  assert "Period" not in result.output

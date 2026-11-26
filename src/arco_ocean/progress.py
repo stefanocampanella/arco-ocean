@@ -1,7 +1,10 @@
 # SPDX-FileCopyrightText: 2026 Stefano Campanella
 # SPDX-License-Identifier: MIT
-"""A download's progress: a JSON document that the ARCO-OCEAN web page reads, for a download run
-once (the historical dataset's), as the forecast collection's heartbeat is for daily ones.
+"""A one-off run's progress: a JSON document that the ARCO-OCEAN web page reads, for the runs
+made once, as the forecast collection's heartbeat is for daily ones. Two kinds: a download (the
+historical dataset's, at a resolution), whose progress is read from its repository, block after
+block; the statistics (`scripts/climatology.sh --status-url`), written in one commit at the end,
+so only their state (computing, finished, failed) and times.
 
 `scripts/download.sh --status-url URL` runs `arco-ocean progress` when the download starts, every
 few minutes while it runs (a beat), and when it ends. Each call reads the progress from the
@@ -38,11 +41,14 @@ from arco_ocean.status import (
   load_model,
   now,
   pass_files,
+  plain,
   require_started,
   update_state,
+  utc,
 )
 
 DownloadState = Literal["running", "finished", "failed"]
+Kind = Literal["download", "statistics"]
 # The commands of arco-make's download runs (their branches: run/<command>-<time>).
 COMMANDS = ("download", "download-extend")
 
@@ -53,6 +59,7 @@ class Progress(BaseModel):
   model_config = MODEL_CONFIG | {"populate_by_name": True}
 
   schema_version: Literal[1] = Field(1, alias="schema")
+  kind: Kind = Field("download", description="A download, or the statistics")
   name: str = Field(description='The recipe: "historical_res-0p25"')
   state: DownloadState
   detail: str | None = None
@@ -61,9 +68,11 @@ class Progress(BaseModel):
   ended_at: Time | None = None
   heartbeat_seconds: int
   start: datetime.date | None = Field(description="The first day downloaded (unknown: none)")
-  end: datetime.date = Field(description="The day after the last")
+  end: datetime.date | None = Field(description="The day after the last (statistics: none)")
   done_until: datetime.date | None = Field(description="The end of the newest block stored")
-  last_commit_at: Time | None = Field(description="When the newest block was committed")
+  last_commit_at: Time | None = Field(
+    description="When the newest block was committed (statistics: their commit, once finished)"
+  )
   error: str | None = Field(None, description="Why the repository could not be read")
 
 
@@ -167,17 +176,32 @@ def failure(error: Exception) -> str:
   return f"the repository could not be read: {type(error).__name__}"
 
 
+def read_statistics(path: str, finished: bool) -> Reading:
+  """The statistics' commit, once they are finished: written in one, they have no progress."""
+  from arcomake import icechunk_utils
+
+  if not finished:
+    return Reading()
+  repo = icechunk_utils.existing_repository(path)
+  if repo is None:
+    return Reading()
+  return Reading(last_commit_at=tip(repo, icechunk_utils.BRANCH).written_at)
+
+
 def refresh(state: ProgressState, finished: bool = False) -> None:
   """Read the progress again into `state`; a failure is recorded, not raised: the progress never
-  stops a download."""
+  stops a run."""
   try:
-    reading = read_progress(
-      state.repository,
-      base=state.base,
-      extension=state.extension,
-      branch=state.branch,
-      finished=finished,
-    )
+    if state.kind == "statistics":
+      reading = read_statistics(state.repository, finished)
+    else:
+      reading = read_progress(
+        state.repository,
+        base=state.base,
+        extension=state.extension,
+        branch=state.branch,
+        finished=finished,
+      )
   except Exception as error:  # noqa: BLE001 (reported in the document)
     state.error = failure(error)
     return
@@ -198,49 +222,63 @@ def load(state_file: pathlib.Path, fresh: bool) -> ProgressState | None:
 @click.option("--publish", help="s3:// URL or local path of the published document.")
 @click.pass_context
 def progress(context: click.Context, state_file: pathlib.Path, publish: str | None) -> None:
-  """A download's progress (scripts/download.sh --status-url)."""
+  """A one-off run's progress (scripts/download.sh and climatology.sh --status-url)."""
   context.obj = Files(state_file, publish)
 
 
 @progress.command()
+@click.option(
+  "--kind",
+  type=click.Choice(get_args(Kind)),
+  default="download",
+  show_default=True,
+  help="What runs.",
+)
 @click.option("--name", required=True, help="The recipe's name.")
 @click.option("--repo", "repository", required=True, help="The output repository.")
 @click.option("--start", type=click.DateTime(["%Y-%m-%d"]), help="The first day (YYYY-MM-DD).")
 @click.option(
-  "--end", type=click.DateTime(["%Y-%m-%d"]), required=True, help="The day after the last."
+  "--end", type=click.DateTime(["%Y-%m-%d"]), help="The day after the last (downloads: required)."
 )
 @click.option("--heartbeat-seconds", type=int, default=300, show_default=True)
 @pass_files
 def start(
   files: Files,
+  kind: Kind,
   name: str,
   repository: str,
   start: datetime.datetime | None,
-  end: datetime.datetime,
+  end: datetime.datetime | None,
   heartbeat_seconds: int,
 ) -> None:
-  """A download starts. Without --start (an extension), the first day is where the repository
-  ends now (`main`, also when the extension resumes a failed one)."""
+  """A run starts. A download without --start (an extension) begins where the repository ends now
+  (`main`, also when the extension resumes a failed one)."""
+  if kind == "download" and end is None:
+    raise click.UsageError("a download needs --end")
+  if kind == "statistics" and (start is not None or end is not None):
+    raise click.UsageError("the statistics take no --start nor --end")
 
   def change(_: ProgressState | None) -> ProgressState:
     error = None
     try:
-      main = read_main(repository)
+      # The statistics have no blocks: what main holds does not matter.
+      main = read_main(repository) if kind == "download" else Main()
     except Exception as caught:  # noqa: BLE001 (reported in the document)
       main, error = Main(), failure(caught)
     state = ProgressState(
+      kind=kind,
       name=name,
       state="running",
       started_at=now(),
       updated_at=now(),
       heartbeat_seconds=heartbeat_seconds,
       start=start.date() if start else main.stored.done_until,
-      end=end.date(),
+      end=end.date() if end else None,
       done_until=None,
       last_commit_at=None,
       repository=repository,
       base=main.base,
-      extension=start is None,
+      extension=kind == "download" and start is None,
     )
     if error is None:
       refresh(state)
@@ -254,10 +292,10 @@ def start(
 @progress.command()
 @pass_files
 def beat(files: Files) -> None:
-  """The download is still running."""
+  """The run is still going on."""
 
   def change(state: ProgressState | None) -> ProgressState | None:
-    state = require_started(state, files, "download")
+    state = require_started(state, files, "run")
     # A late beat of an ended download would make it look as if it were running again.
     if state.state != "running":
       return None
@@ -276,10 +314,10 @@ def beat(files: Files) -> None:
 @click.option("--detail", help="What the page shows next to the state.")
 @pass_files
 def end(files: Files, new_state: DownloadState, detail: str | None) -> None:
-  """The download ends."""
+  """The run ends."""
 
   def change(state: ProgressState | None) -> ProgressState:
-    state = require_started(state, files, "download")
+    state = require_started(state, files, "run")
     refresh(state, finished=new_state == "finished")
     state.state = new_state
     state.detail = detail
@@ -287,6 +325,34 @@ def end(files: Files, new_state: DownloadState, detail: str | None) -> None:
     return state
 
   update_state(files, load, change, fresh=False)
+
+
+def summary(progress: Progress) -> str:
+  """The progress's public content in Markdown, for an issue (scripts/alert.sh)."""
+  what = "Download" if progress.kind == "download" else "Statistics"
+  detail = f" {plain(progress.detail)}" if progress.detail is not None else ""
+  lines = [
+    f"**{what} {plain(progress.name)}: {progress.state}.**{detail}",
+    "",
+    f"- Started: {utc(progress.started_at)}, last update: {utc(progress.updated_at)},"
+    f" ended: {utc(progress.ended_at)}",
+  ]
+  if progress.kind == "download":
+    lines.append(
+      f"- Period: {plain(progress.start)} to {plain(progress.end)} (excluded), stored up to:"
+      f" {plain(progress.done_until)} (excluded)"
+    )
+  lines.append(f"- Last commit: {utc(progress.last_commit_at)}")
+  if progress.error is not None:
+    lines.append(f"- {plain(progress.error)}")
+  return "\n".join(lines)
+
+
+@progress.command("summary")
+@pass_files
+def print_summary(files: Files) -> None:
+  """Print the progress's public content in Markdown (scripts/alert.sh)."""
+  click.echo(summary(require_started(load(files.state_file, False), files, "run")))
 
 
 def json_schema() -> str:

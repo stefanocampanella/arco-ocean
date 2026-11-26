@@ -1,5 +1,6 @@
 {
   "schema": 1,
+  "kind": "download",
   "name": "historical_res-0p25",
   "state": "running",
   "detail": null,
