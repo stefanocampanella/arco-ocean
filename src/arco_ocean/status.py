@@ -376,3 +376,101 @@ def end(files: Files, new_state: CollectionState, detail: str | None) -> None:
 def json_schema() -> str:
   """The published document's JSON Schema."""
   return json.dumps(Heartbeat.model_json_schema(by_alias=True, mode="serialization"), indent=2)
+
+
+def resolution_label(res: str) -> str:
+  """ "0p25" as "0.25°"."""
+  return res.replace("p", ".", 1) + "°"
+
+
+def duration(delta: datetime.timedelta) -> str:
+  """ "3 min", "2 h 5 min", "1 d 3 h", as the web page writes durations."""
+  minutes = max(0, int(delta.total_seconds() // 60))
+  if minutes < 60:
+    return f"{minutes} min"
+  hours, minutes = divmod(minutes, 60)
+  if hours < 24:
+    return f"{hours} h {minutes} min" if minutes else f"{hours} h"
+  days, hours = divmod(hours, 24)
+  return f"{days} d {hours} h" if hours else f"{days} d"
+
+
+def behind(heartbeat: Heartbeat, at: datetime.datetime) -> list[str]:
+  """Why the resolutions of a collection are behind, as the web page judges a finished one
+  (`behind` in site/status.js): a newest stored run older than the recipes' `missing_after`
+  before the newest asked for (runs that old are stored even without a source, flagged), none
+  stored, or a resolution waiting for its sources for longer than that (a source that stopped
+  publishing keeps it waiting every day, while its older runs are stored without it)."""
+  limit = heartbeat.missing_after_days
+  reasons = []
+  for entry in heartbeat.resolutions:
+    label = resolution_label(entry.res)
+    if entry.latest_run is None:
+      reasons.append(f"{label} has no run stored")
+      continue
+    lag = (heartbeat.target_run - entry.latest_run).days
+    if lag > limit:
+      reasons.append(f"{label}'s newest run is {entry.latest_run}, {lag} days before the newest")
+      continue
+    if entry.waiting_since is not None and at - entry.waiting_since > datetime.timedelta(limit):
+      reasons.append(f"{label} has waited for a source for {duration(at - entry.waiting_since)}")
+  return reasons
+
+
+def plain(value: object) -> str:
+  """Text from the heartbeat made inert in Markdown, on one line: no mention, no issue
+  reference, no HTML, no table cell break."""
+  text = " ".join(str("–" if value is None else value).split())
+  for old, new in (
+    ("&", "&amp;"),
+    ("<", "&lt;"),
+    (">", "&gt;"),
+    ("@", "@⁠"),
+    ("#", "#⁠"),
+    ("`", "'"),
+    ("|", "\\|"),
+  ):
+    text = text.replace(old, new)
+  return text
+
+
+def utc(value: datetime.datetime | None) -> str:
+  return "–" if value is None else value.astimezone(datetime.UTC).strftime("%Y-%m-%d %H:%M UTC")
+
+
+def summary(heartbeat: Heartbeat) -> str:
+  """The heartbeat's public content in Markdown, for an issue (scripts/alert.sh)."""
+  detail = f" {plain(heartbeat.detail)}" if heartbeat.detail is not None else ""
+  lines = [
+    f"**Collection {heartbeat.state}.**{detail}",
+    "",
+    f"- Started: {utc(heartbeat.started_at)}, last heartbeat: {utc(heartbeat.updated_at)},"
+    f" ended: {utc(heartbeat.ended_at)}",
+    f"- Newest run asked for: {heartbeat.target_run}",
+  ]
+  if heartbeat.resolutions:
+    lines += ["", "| Resolution | State | Newest run | Runs | Error |", "|---|---|---|---|---|"]
+    for entry in heartbeat.resolutions:
+      cells = (resolution_label(entry.res), entry.state, entry.latest_run, entry.runs, entry.error)
+      lines.append("| " + " | ".join(plain(cell) for cell in cells) + " |")
+  return "\n".join(lines)
+
+
+@status.command()
+@pass_files
+def overdue(files: Files) -> None:
+  """Fail if the collection finished behind (see `behind`): forecast.sh then fails, and its
+  alert (scripts/alert.sh) reports it, as the web page shows it stale."""
+  state = started(load(files.state_file), files)
+  if state.state != "finished":
+    return
+  reasons = behind(state, now())
+  if reasons:
+    raise click.ClickException("the collection finished behind: " + "; ".join(reasons) + ".")
+
+
+@status.command("summary")
+@pass_files
+def print_summary(files: Files) -> None:
+  """Print the heartbeat's public content in Markdown (scripts/alert.sh)."""
+  click.echo(summary(started(load(files.state_file), files)))

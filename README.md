@@ -196,8 +196,9 @@ uv sync --frozen --no-default-groups
 scripts/forecast.sh --bind /data --status-url s3://ogs-arco-ocean/status/forecast.json \
     --start 2026-07-01
 # Then every day at 12:00 UTC, from systemd (below), once the backfill is stored: the units
-# extend the repositories, and fail while there are none.
-scripts/install_units.sh --keepalive -- --bind /data
+# extend the repositories, and fail while there are none; their failures and recoveries are
+# reported as a GitHub issue (below).
+scripts/install_units.sh --alerts -- --bind /data
 ```
 
 arco-make's settings and credentials come from its settings file, `~/.arcomakerc`, which the
@@ -219,14 +220,15 @@ still makes it; a run still missing is tried again
 - a collection that hangs is stopped after 20 hours (its heartbeat ends aborted, the next one
   resumes), and one that takes more than 80 % of the machine's memory is killed;
 - the output goes to the journal (`journalctl --user -u arco-ocean-forecast`), the next and last
-  runs are shown by `systemctl --user list-timers`; the unit fails only when a download does (a
-  run not published yet ends `forecast.sh` with 75, a success for the unit).
+  runs are shown by `systemctl --user list-timers`; the unit fails when a download does, or
+  when the collection finishes behind (below; a run not published yet, within `missing_after`,
+  ends `forecast.sh` with 75, a success for the unit).
 
 The installer links the units from the checkout (after a `git pull` that changes them:
 `systemctl --user daemon-reload`) and writes the machine's part, the checkout and the options, in
 a drop-in (`~/.config/systemd/user/arco-ocean-forecast.service.d/local.conf`); run it again to
 change the options, or from another checkout to move the units there. `--uninstall` stops the
-timers and a collection running and removes what the installer wrote (drop-ins of your own, from
+timer and a collection running and removes what the installer wrote (drop-ins of your own, from
 `systemctl --user edit`, stay). The user's units run only while the user
 is logged in, unless lingering is on (once: `sudo loginctl enable-linger $USER`). A collection
 can still be run by hand (`systemctl --user start arco-ocean-forecast`, or `scripts/forecast.sh`):
@@ -253,32 +255,34 @@ missed beats. A finished collection becomes stale when the next has not finished
 (`--stale-after`), and is stale at once when a resolution falls behind by more than the recipes'
 `missing_after` (two days, `--missing-after`, published with the heartbeat): its newest stored
 run older than that, or the resolution waiting for its sources for longer (a source that stopped
-publishing keeps it waiting every day, while the older runs are stored without it, flagged). The
+publishing keeps it waiting every day, while the older runs are stored without it, flagged);
+`forecast.sh` then fails (`arco-ocean status overdue`), so that its alert reports it. The
 heartbeat never stops a collection: a failure to publish it is logged in
 `logs/forecast/status.log`.
 
-A watchdog, `.github/workflows/forecast-watchdog.yml`, reads the heartbeat every 30 minutes from
-GitHub's machines, judges it as the page does (`site/status.js`), and keeps an issue labelled
-`forecast-alert` open from the moment the collection is stale, aborted or unknown until a
-collection finishes, assigned to the maintainers: GitHub emails them when the incident starts,
-when it changes (another state, or another collection) and when the watchdog closes the issue.
-Closing it by hand acknowledges the incident: only the next opens another issue. A heartbeat that
-cannot be read for three minutes is unknown. Running outside the machine that collects, the
-watchdog also reports that machine down. It is off until the repository's
-Actions variables give the heartbeat's URL, `FORECAST_STATUS_URL`
-(`https://ogs-arco-ocean.s3.eu-south-1.amazonaws.com/status/forecast.json`), and the logins to
-assign, `ALERT_ASSIGNEES` (comma-separated). GitHub disables the schedules of a public repository
-after 60 days without activity, warning by email first. The collecting machine keeps it enabled:
-`scripts/install_units.sh --keepalive` (`--keepalive-repo OWNER/REPO` for another repository than
-`stefanocampanella/arco-ocean`) adds a daily unit that runs
-`scripts/keep_watchdog_enabled.sh`, which enables the watchdog again if GitHub disabled it for
-inactivity (a workflow disabled by hand stays so), and otherwise asks GitHub to enable it anyway,
-which tools doing the same report to reset the count of days (GitHub does not document it). It
-needs `gh` and a token in `~/.config/arco-ocean/github-token`, readable by its owner only
-(`chmod 600`): a fine-grained personal access token for this repository alone, with the
-repository permission "Actions: Read and write" and nothing else. GitHub emails before the token
-expires; a failed keepalive shows in `systemctl --user list-units --failed`. Without it, enable
-the workflow again in the Actions tab.
+The alerts (`scripts/install_units.sh --alerts`) run on the machine that collects. systemd
+starts `arco-ocean-alert@failed` when the collection's unit fails (a download failed, the
+collection finished behind, it was stopped or timed out), and `arco-ocean-alert@finished` when
+it succeeds (`OnFailure=` and `OnSuccess=`, in the collection's drop-in). Both run
+`scripts/alert.sh`:
+- **A failure** adds a comment to the open issue labelled `forecast-alert`, or opens one. It
+  holds what systemd tells (the unit's result, exit code and status, and the `journalctl`
+  command for its logs) and the heartbeat's public content (`arco-ocean status summary`), never
+  logs, paths or host names: the repository is public.
+- **A success** closes the open issue, with a comment.
+
+GitHub notifies the repository's watchers. The issues are opened with the maintainer's token,
+and GitHub does not email its own actions to a user unless asked: turn on "Include your own
+updates" in GitHub's notification settings (Email preferences) to receive them. The token is in
+`~/.config/arco-ocean/github-token`, readable by its owner only (`chmod 600`): a fine-grained
+personal access token for this repository alone, with the repository permission "Issues: Read
+and write" and nothing else (`--alert-repo OWNER/REPO` for another repository). GitHub emails
+before the token expires; a failed report shows in `systemctl --user list-units --failed`.
+
+A machine that is down reports nothing: the web page shows the collection stale, after three
+missed beats or 30 hours without a collection finished. Until 26 Nov 2026 a GitHub Actions
+watchdog read the heartbeat from outside, with a keepalive against GitHub disabling its
+schedule; the installer removes the keepalive's units where it finds them.
 
 ### Checks
 
@@ -286,10 +290,9 @@ the workflow again in the Actions tab.
 ruff, ty, ShellCheck, REUSE and a secret scan. `uv run --frozen pytest` (tests/python, with a
 coverage of the package of at least 80 % in CI) loads every recipe with the models of the pinned arco-make (an unknown key, step or argument fails),
 runs the examples of the coarsening notes, and tests the forecast heartbeat and the systemd units
-(their installer and the watchdog's keepalive, with stand-ins for `systemctl` and `gh`; the units
-checked by `systemd-analyze verify`); the pre-commit checks
-also test the web page's and the watchdog's logic (`node --test site/status.test.mjs
-scripts/forecast_watchdog.test.mjs`, Node.js from `uvx`). CI runs both on every pull request.
+(their installer and the alerts, with stand-ins for `systemctl` and `gh`; the units checked by
+`systemd-analyze verify`); the pre-commit checks also test the web page's logic
+(`node --test site/status.test.mjs`, Node.js from `uvx`). CI runs both on every pull request.
 
 ## Data format
 

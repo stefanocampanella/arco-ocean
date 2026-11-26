@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: 2026 Stefano Campanella
+# SPDX-License-Identifier: MIT
+#
+# Reports the forecast collection on GitHub (scripts/alert.sh): arco-ocean-alert@failed when
+# arco-ocean-forecast.service fails, arco-ocean-alert@finished when it succeeds, named by the
+# OnFailure= and OnSuccess= that scripts/install_units.sh --alerts writes into the collection's
+# drop-in; systemd gives the unit's result in MONITOR_* variables. Needs a GitHub token in a file
+# (Issues: read and write). A failed report shows in systemctl --user list-units --failed.
+
+[Unit]
+Description=ARCO-OCEAN: report the forecast collection (%i) on GitHub
+Documentation=https://github.com/stefanocampanella/arco-ocean#forecasts
+
+[Service]
+Type=oneshot
+# gh, and uv for the heartbeat's summary, are in ~/.local/bin on some machines.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=ALERT_OPTIONS=
+ExecStart=/bin/bash scripts/alert.sh $ALERT_OPTIONS %i
+TimeoutStartSec=5min

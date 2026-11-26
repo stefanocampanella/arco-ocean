@@ -3,6 +3,7 @@
 """The forecast collection's heartbeat (`arco-ocean status`), on a local forecast repository and
 a local published file."""
 
+import datetime
 import json
 import os
 import pathlib
@@ -279,3 +280,102 @@ def test_the_published_missing_after_is_the_recipes(files) -> None:
     state, published, "start", "--target-run", "2026-11-24", "--missing-after-days", "2"
   )
   assert document["missing_after_days"] == 2.0
+
+
+NOW = datetime.datetime(2026, 11, 24, 13, 0, tzinfo=datetime.UTC)
+
+
+def finished(latest: str | None, **fields) -> status.Heartbeat:
+  """A collection that finished at 12:20 on 24 Nov 2026, 0.25° with its newest run `latest`
+  (the same cases as the page's tests, tests of site/status.js)."""
+  document = {
+    "schema": 1,
+    "state": "finished",
+    "started_at": "2026-11-24T12:00:00Z",
+    "updated_at": "2026-11-24T12:20:00Z",
+    "ended_at": "2026-11-24T12:20:00Z",
+    "heartbeat_seconds": 300,
+    "stale_after_hours": 30.0,
+    "missing_after_days": 2.0,
+    "target_run": "2026-11-24",
+    "resolutions": [
+      {"res": "0p25", "state": "not_published", "latest_run": latest, "runs": 147},
+      {"res": "1p0", "state": "finished", "latest_run": "2026-11-24", "runs": 147},
+    ],
+  }
+  return status.Heartbeat.model_validate(document | fields)
+
+
+def test_behind_as_the_page_judges_it() -> None:
+  # Two days behind: runs younger than missing_after may wait for their sources.
+  assert status.behind(finished("2026-11-22"), NOW) == []
+  assert status.behind(finished("2026-11-21"), NOW) == [
+    "0.25°'s newest run is 2026-11-21, 3 days before the newest"
+  ]
+  # The heartbeat's missing_after decides.
+  assert status.behind(finished("2026-11-21", missing_after_days=3), NOW) == []
+  assert status.behind(finished("2026-11-22", missing_after_days=1), NOW) != []
+  # A repository without runs (missing, or unreadable) is behind too.
+  assert status.behind(finished(None), NOW) == ["0.25° has no run stored"]
+
+
+def test_a_resolution_waiting_longer_than_missing_after_is_behind() -> None:
+  # A source that stopped: its older runs are stored without it, so the lag stays at two days,
+  # but the resolution waits every day.
+  waiting = finished("2026-11-22")
+  waiting.resolutions[0].waiting_since = datetime.datetime(
+    2026, 11, 22, 13, 30, tzinfo=datetime.UTC
+  )
+  assert status.behind(waiting, NOW) == []
+  assert status.behind(waiting, NOW + datetime.timedelta(hours=1)) == [
+    "0.25° has waited for a source for 2 d"
+  ]
+
+
+def test_overdue_fails_only_a_collection_finished_behind(files) -> None:
+  state, _ = files
+  state.parent.mkdir(parents=True)
+  for document, code in (
+    (finished("2026-11-24"), 0),
+    (finished("2026-11-21"), 1),
+    # Aborted, a collection fails by itself (forecast.sh exits 1).
+    (finished("2026-11-21", state="aborted"), 0),
+  ):
+    state.write_text(document.model_dump_json(by_alias=True))
+    result = invoke(state, "overdue")
+    assert result.exit_code == code, result.output
+  state.write_text(finished("2026-11-21").model_dump_json(by_alias=True))
+  assert "finished behind: 0.25°'s newest run is 2026-11-21" in invoke(state, "overdue").output
+
+
+def test_the_summary_shows_the_public_content_inert(files) -> None:
+  state, _ = files
+  state.parent.mkdir(parents=True)
+  document = status.State.model_validate(
+    finished("2026-11-24", detail="Late <b>@someone</b> #12 `x` | y").model_dump(by_alias=True)
+    | {"repositories": {"0p25": "/data/private/path"}}
+  )
+  document.resolutions[0].error = "the repository could not be read: OSError"
+  state.write_text(document.model_dump_json(by_alias=True))
+  result = invoke(state, "summary")
+  assert result.exit_code == 0, result.output
+  text = result.output
+  assert text.startswith("**Collection finished.** Late &lt;b&gt;@⁠someone&lt;/b&gt; #⁠12")
+  assert "'x' \\| y" in text
+  assert "- Started: 2026-11-24 12:00 UTC, last heartbeat: 2026-11-24 12:20 UTC" in text
+  assert (
+    "| 0.25° | not_published | 2026-11-24 | 147 | the repository could not be read: OSError |"
+    in text
+  )
+  # The repositories' paths are not public.
+  assert "/data/private" not in text
+  assert invoke(state.with_name("none.json"), "summary").exit_code == 1
+
+
+def test_durations_as_the_page_writes_them() -> None:
+  minutes = datetime.timedelta(minutes=1)
+  assert status.duration(3 * minutes) == "3 min"
+  assert status.duration(125 * minutes) == "2 h 5 min"
+  assert status.duration(27 * 60 * minutes) == "1 d 3 h"
+  assert status.duration(48 * 60 * minutes) == "2 d"
+  assert status.duration(-minutes) == "0 min"

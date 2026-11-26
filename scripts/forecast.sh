@@ -247,6 +247,17 @@ for RES in "${RES_LIST[@]}"; do
     fi
 done
 
+# A collection that ended with the runs stored, but behind (a source that stopped publishing: its
+# runs are stored without it, days late, or wait every day; see `arco-ocean status overdue`),
+# fails: the unit's alert (scripts/alert.sh) reports it, as the page shows it stale.
+overdue() {
+    [[ -n "${STATUS_URL}" ]] || return 0
+    if ! "${ARCO_OCEAN[@]}" status --state-file "${STATUS_FILE}" overdue; then
+        echo "Forecast collection behind (see the heartbeat): reported as a failure." >&2
+        exit 1
+    fi
+}
+
 ENDED=true
 if [[ ${#FAILED[@]} -gt 0 ]]; then
     status end aborted --detail "The download failed at ${FAILED[*]}: the next collection resumes it."
@@ -256,8 +267,10 @@ fi
 if [[ ${#WAITING[@]} -gt 0 ]]; then
     status end finished --detail "A source has not published the newest run yet (${WAITING[*]}): the next collection adds it."
     echo "Forecast collection: the newest run is not published yet at ${WAITING[*]}; the next run catches up." >&2
+    overdue
     # Not a failure (the unit counts it a success), but not every run stored: 75, as download.sh.
     exit 75
 fi
 status end finished
+overdue
 echo "Forecast collection done ($(date -u))."
