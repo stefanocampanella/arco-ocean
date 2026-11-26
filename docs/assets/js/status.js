@@ -364,6 +364,19 @@ function assessStatistics(statistics, now) {
 // The headline's state among the resolutions: the most worrying first.
 const SEVERITY = ["aborted", "stale", "unknown", "downloading", "finished"];
 
+// A resolution whose document could not be read (the bucket out of reach, an error answer, a
+// damaged document), as opposed to one not published (not started).
+const UNREADABLE = {
+  status: "unknown",
+  label: "Unknown",
+  detail: "Could not be read: the bucket out of reach, or the document damaged.",
+};
+
+// A resolution's verdict: its document's, or UNREADABLE.
+function verdictOf(entry, now) {
+  return entry.unreadable ? UNREADABLE : assessProgress(entry.progress, now);
+}
+
 // What the headlines say of the historical downloads and of the statistics when none has
 // published, or every one published is finished.
 const HEADLINES = {
@@ -379,15 +392,15 @@ const HEADLINES = {
 
 // The state of the historical downloads (`card` "historical") or of the statistics
 // ("statistics") as the card's headline shows it, from each resolution's document (`entries`:
-// {res, progress}, progress null where none could be read: not started, or the bucket out of
-// reach): the most worrying resolution's verdict, named, and the resolutions not started; finished
-// when every one published is.
+// {res, progress, unreadable}; progress null where there is none: not started if not
+// `unreadable`): the most worrying resolution's verdict, named, and the resolutions not started;
+// finished when every one published is.
 export function assessRuns(entries, now = Date.now(), card = "historical") {
   const words = HEADLINES[card];
   const judged = (entries ?? [])
-    .filter((entry) => entry.progress)
-    .map((entry) => ({ res: entry.res, verdict: assessProgress(entry.progress, now) }));
-  const missing = (entries ?? []).filter((entry) => !entry.progress);
+    .filter((entry) => entry.progress || entry.unreadable)
+    .map((entry) => ({ res: entry.res, verdict: verdictOf(entry, now) }));
+  const missing = (entries ?? []).filter((entry) => !entry.progress && !entry.unreadable);
   if (judged.length === 0) {
     return {
       status: "unknown",
@@ -501,6 +514,20 @@ async function fetchDocument(url) {
   }
 }
 
+// A resolution's document: {progress} (null if not published: 403, as S3 answers for a missing
+// key when listing is not allowed, or 404), or {progress: null, unreadable: true} (no answer, an
+// error answer, not JSON).
+export async function readDocument(url, fetcher = fetch) {
+  try {
+    const answer = await fetcher(url, { cache: "no-store" });
+    if (answer.status === 403 || answer.status === 404) return { progress: null };
+    if (!answer.ok) return { progress: null, unreadable: true };
+    return { progress: await answer.json() };
+  } catch {
+    return { progress: null, unreadable: true };
+  }
+}
+
 function cell(row, text) {
   const td = document.createElement("td");
   td.textContent = text;
@@ -561,9 +588,9 @@ function dateCell(row, text) {
   return td;
 }
 
-// The documents of the historical downloads at each resolution (none read: every one null).
-function noProgress() {
-  return HISTORICAL_RESOLUTIONS.map((res) => ({ res, progress: null }));
+// Every resolution unreadable: what the card shows when the documents read cannot be shown.
+function unshown() {
+  return HISTORICAL_RESOLUTIONS.map((res) => ({ res, progress: null, unreadable: true }));
 }
 
 // The card's headline, as judged.
@@ -574,29 +601,30 @@ function showHeadline(el, verdict) {
   el.querySelector(".status-detail").textContent = verdict.detail;
 }
 
-// A row's state cell: "Not started" without a document.
-function stateCell(row, progress, now) {
-  if (!progress) {
+// A row's state cell: "Not started" without a document, "Unknown" if it could not be read.
+function stateCell(row, entry, now) {
+  if (!entry.progress && !entry.unreadable) {
     cell(row, "Not started").dataset.state = "pending";
     return;
   }
-  const own = assessProgress(progress, now);
+  const own = verdictOf(entry, now);
   cell(row, own.label).dataset.state = own.status;
 }
 
 // Show the historical downloads' progresses (`entries`: {res, progress}) in the widget's
 // element, as judged at `now`.
 export function showProgress(el, entries, now) {
-  const all = entries ?? noProgress();
+  const all = entries ?? unshown();
   showHeadline(el, assessRuns(all, now, "historical"));
 
   const body = el.querySelector("tbody");
   body.replaceChildren();
-  for (const { res, progress } of all) {
+  for (const entry of all) {
+    const { res, progress } = entry;
     const row = document.createElement("tr");
     cell(row, resolutionLabel(res));
     const ok = progress && progress.schema === 1;
-    stateCell(row, progress, now);
+    stateCell(row, entry, now);
     dateCell(row, ok ? period(progress) : "–");
     const share = ok ? fraction(progress) : null;
     const stored = dateCell(
@@ -624,15 +652,16 @@ export function showProgress(el, entries, now) {
 // Show the statistics' states (`entries`: {res, progress}) in the widget's element, as judged at
 // `now`.
 export function showStatistics(el, entries, now) {
-  const all = entries ?? noProgress();
+  const all = entries ?? unshown();
   showHeadline(el, assessRuns(all, now, "statistics"));
   const body = el.querySelector("tbody");
   body.replaceChildren();
-  for (const { res, progress } of all) {
+  for (const entry of all) {
+    const { res, progress } = entry;
     const row = document.createElement("tr");
     cell(row, resolutionLabel(res));
     const ok = progress && progress.schema === 1;
-    stateCell(row, progress, now);
+    stateCell(row, entry, now);
     dateCell(row, ok ? utc(progress.started_at) : "–");
     dateCell(row, ok ? ago(progress.updated_at, now) : "–");
     dateCell(row, ok && progress.last_commit_at ? utc(progress.last_commit_at) : "–");
@@ -662,9 +691,9 @@ export function statisticsUrls(search) {
   return documentUrls(search, "statistics", DEFAULT_STATISTICS_PREFIX);
 }
 
-// Each resolution's document, read from `urls` (null where it cannot be).
+// Each resolution's document, read from `urls` (`readDocument`).
 function loadAll(urls) {
-  return Promise.all(urls.map(async ({ res, url }) => ({ res, progress: await fetchDocument(url) })));
+  return Promise.all(urls.map(async ({ res, url }) => ({ res, ...(await readDocument(url)) })));
 }
 
 // The cards, by the directive's "show": what each reads (`load`, from the page's address) and

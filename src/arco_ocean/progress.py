@@ -14,11 +14,14 @@ commit's metadata (`arcomake_block`), and `main` moves to the run's last commit 
 complete. The newest block committed tells how far the download is, its commit when. A download
 killed without notice stops beating: the page calls it stale.
 
-Which run is this download's: one whose branch started from `main` as it was when the download
-started (recorded then), a run resumed included; a branch of an earlier run that `main` has moved
-past since is not. Before its first block, nothing is stored by the download, unless it extends
-the repository (then what `main` holds counts); a download that replaces an output does not show
-the old one's end. Once the run's branch is known, a beat reads only its tip.
+Which run is this download's: at its first read, the state records `main`'s tip and the tips of
+the run branches of its command (`download`, or `download-extend` for an extension); the run's
+branch is then the one whose tip moves (a run resumed: from its next block), or a new one. A
+branch left by an earlier run, which a `--replace` leaves as it is, never counts. Before its
+first block, nothing is stored by the download, unless it extends the repository (then what
+`main` holds counts); a download that replaces an output does not show the old one's end. Once
+the run's branch is known, a beat reads only its tip. A first read that fails is made again at
+the next beat.
 
 The document is `Progress` (`arco-ocean progress-schema` prints its JSON Schema); the state
 file, `ProgressState`, also holds the repository's path or URL and what identifies the run, which
@@ -49,8 +52,11 @@ from arco_ocean.status import (
 
 DownloadState = Literal["running", "finished", "failed"]
 Kind = Literal["download", "statistics"]
-# The commands of arco-make's download runs (their branches: run/<command>-<time>).
-COMMANDS = ("download", "download-extend")
+
+
+def command(extension: bool) -> str:
+  """The command of arco-make's download runs of a kind (their branches: run/<command>-<time>)."""
+  return "download-extend" if extension else "download"
 
 
 class Progress(BaseModel):
@@ -76,15 +82,19 @@ class Progress(BaseModel):
   error: str | None = Field(None, description="Why the repository could not be read")
 
 
-PRIVATE = {"repository", "base", "extension", "branch"}
+PRIVATE = {"repository", "extension", "ready", "base", "known", "branch"}
 
 
 class ProgressState(Progress):
   """The state file: the document, where the repository is, and what identifies the run."""
 
   repository: str
-  base: str | None = Field(description="main's tip when the download started (no repository: none)")
   extension: bool = Field(description="Whether the download extends the repository")
+  ready: bool = Field(False, description="Whether the repository was read once (`prepare`)")
+  base: str | None = Field(None, description="main's tip at the first read (no repository: none)")
+  known: dict[str, str] = Field(
+    default_factory=dict, description="The run branches of its command and their tips, then"
+  )
   branch: str | None = Field(None, description="The run's branch, once found")
 
   def public(self) -> str:
@@ -124,50 +134,68 @@ def stored(snapshot: Any) -> Reading:
   return Reading(end, snapshot.written_at) if end is not None else Reading()
 
 
-@dataclasses.dataclass(frozen=True)
-class Main:
-  """`main` when a download starts: its tip (none without a repository) and its block."""
-
-  base: str | None = None
-  stored: Reading = Reading()
-
-
-def read_main(path: str) -> Main:
+def run_branches(repo: Any, of: str) -> dict[str, str]:
+  """The run branches of the command `of` and their tips."""
   from arcomake import icechunk_utils
 
-  repo = icechunk_utils.existing_repository(path)
-  if repo is None:
-    return Main()
-  snapshot = tip(repo, icechunk_utils.BRANCH)
-  return Main(str(snapshot.id), stored(snapshot))
+  found: dict[str, str] = {}
+  for name in repo.list_branches():
+    parsed = icechunk_utils.parse_label(name.removeprefix("run/"))
+    if name.startswith("run/") and parsed is not None and parsed[0] == of:
+      found[str(name)] = str(repo.lookup_branch(name))
+  return found
 
 
-def read_progress(
-  path: str, *, base: str | None, extension: bool, branch: str | None, finished: bool = False
-) -> Reading:
-  """The progress of the download that started with `main` at `base`, in the repository at
-  `path` (local or s3://); `branch`, its run's branch if already found. `finished`: the run is
+def prepare(state: "ProgressState", repo: Any) -> None:
+  """The first read: `main`'s tip and the run branches of the download's command, as they are
+  before it writes; an extension starts where `main` ends."""
+  from arcomake import icechunk_utils
+
+  if repo is not None:
+    main = tip(repo, icechunk_utils.BRANCH)
+    state.base = str(main.id)
+    state.known = run_branches(repo, command(state.extension))
+    if state.extension and state.start is None:
+      state.start = stored(main).done_until
+  state.ready = True
+
+
+def find_branch(state: "ProgressState", repo: Any) -> str | None:
+  """The download's run branch: the newest whose tip moved since the first read, or new."""
+  from arcomake import icechunk_utils
+
+  moved = [
+    (icechunk_utils.parse_label(name.removeprefix("run/")), name)
+    for name, snapshot in run_branches(repo, command(state.extension)).items()
+    if state.known.get(name) != snapshot
+  ]
+  return max(moved)[1] if moved else None
+
+
+def read_progress(state: "ProgressState", repo: Any, finished: bool = False) -> Reading:
+  """The download's progress in `repo` (None: no repository yet). `finished`: the run is
   complete, `main` holds it."""
   from arcomake import icechunk_utils
 
-  repo = icechunk_utils.existing_repository(path)
   if repo is None:
     return Reading()
-  if branch is None and not finished:
-    run = icechunk_utils.waiting_run(repo, *COMMANDS)
-    if run is not None and run.current and (base is None or run.base == base):
-      branch = run.branch
-  if branch is not None and not finished and branch in repo.list_branches():
-    snapshot = tip(repo, branch)
-    # The run's own commit: a branch without one yet points to `main`'s.
-    label = branch.removeprefix("run/")
-    if (snapshot.metadata or {}).get(icechunk_utils.RUN_KEY) == label:
-      reading = stored(snapshot)
-      if reading.done_until is not None:
-        return dataclasses.replace(reading, branch=branch)
+  branch = state.branch
+  if not finished:
+    branch = branch or find_branch(state, repo)
+    if branch is not None:
+      try:
+        snapshot = tip(repo, branch)
+      except Exception:  # noqa: BLE001 (the branch deleted since: the run finished, main has it)
+        snapshot = None
+      # The run's own commit: a branch without one yet points to `main`'s.
+      label = branch.removeprefix("run/")
+      if snapshot is not None and (snapshot.metadata or {}).get(icechunk_utils.RUN_KEY) == label:
+        reading = stored(snapshot)
+        if reading.done_until is not None:
+          return dataclasses.replace(reading, branch=branch)
   snapshot = tip(repo, icechunk_utils.BRANCH)
   # `main` counts once the run moved it (or the run is complete), or for an extension.
-  if finished or extension or str(snapshot.id) != base:
+  if finished or state.extension or str(snapshot.id) != state.base:
     return dataclasses.replace(stored(snapshot), branch=branch)
   return Reading(branch=branch)
 
@@ -189,19 +217,19 @@ def read_statistics(path: str, finished: bool) -> Reading:
 
 
 def refresh(state: ProgressState, finished: bool = False) -> None:
-  """Read the progress again into `state`; a failure is recorded, not raised: the progress never
-  stops a run."""
+  """Read the progress again into `state` (the repository opened once; for a download, its first
+  read too, until it succeeds); a failure is recorded, not raised: the progress never stops a
+  run."""
+  from arcomake import icechunk_utils
+
   try:
     if state.kind == "statistics":
       reading = read_statistics(state.repository, finished)
     else:
-      reading = read_progress(
-        state.repository,
-        base=state.base,
-        extension=state.extension,
-        branch=state.branch,
-        finished=finished,
-      )
+      repo = icechunk_utils.existing_repository(state.repository)
+      if not state.ready:
+        prepare(state, repo)
+      reading = read_progress(state, repo, finished)
   except Exception as error:  # noqa: BLE001 (reported in the document)
     state.error = failure(error)
     return
@@ -259,12 +287,6 @@ def start(
     raise click.UsageError("the statistics take no --start nor --end")
 
   def change(_: ProgressState | None) -> ProgressState:
-    error = None
-    try:
-      # The statistics have no blocks: what main holds does not matter.
-      main = read_main(repository) if kind == "download" else Main()
-    except Exception as caught:  # noqa: BLE001 (reported in the document)
-      main, error = Main(), failure(caught)
     state = ProgressState(
       kind=kind,
       name=name,
@@ -272,18 +294,14 @@ def start(
       started_at=now(),
       updated_at=now(),
       heartbeat_seconds=heartbeat_seconds,
-      start=start.date() if start else main.stored.done_until,
+      start=start.date() if start else None,
       end=end.date() if end else None,
       done_until=None,
       last_commit_at=None,
       repository=repository,
-      base=main.base,
       extension=kind == "download" and start is None,
     )
-    if error is None:
-      refresh(state)
-    else:
-      state.error = error
+    refresh(state)
     return state
 
   update_state(files, load, change, fresh=True)

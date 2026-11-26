@@ -320,6 +320,9 @@ progress_run() {
         PROGRESS_AGAIN="rerun it."
     fi
     arco_ocean_command
+    # An earlier run's state is not this one's: were this one stopped before its start writes
+    # it, the trap would end the earlier one's.
+    rm -f "${PROGRESS_FILE}"
     # Before the start: a run stopped while it starts ends its progress too.
     trap progress_exit EXIT
     trap 'exit 130' INT
