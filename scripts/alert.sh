@@ -57,16 +57,11 @@ ARGUMENTS=("$@")
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --repo) REPO="$2"; shift 2 ;;
-        --repo=*) REPO="${1#*=}"; shift ;;
-        --token-file) TOKEN_FILE="$2"; shift 2 ;;
-        --token-file=*) TOKEN_FILE="${1#*=}"; shift ;;
-        --state-file) STATE_FILE="$2"; shift 2 ;;
-        --state-file=*) STATE_FILE="${1#*=}"; shift ;;
-        --attempts) ATTEMPTS="$2"; shift 2 ;;
-        --attempts=*) ATTEMPTS="${1#*=}"; shift ;;
-        --retry-delay) RETRY_DELAY="$2"; shift 2 ;;
-        --retry-delay=*) RETRY_DELAY="${1#*=}"; shift ;;
+        --repo|--repo=*) option_value "$@"; REPO="${VALUE}"; shift "${SHIFT_BY}" ;;
+        --token-file|--token-file=*) option_value "$@"; TOKEN_FILE="${VALUE}"; shift "${SHIFT_BY}" ;;
+        --state-file|--state-file=*) option_value "$@"; STATE_FILE="${VALUE}"; shift "${SHIFT_BY}" ;;
+        --attempts|--attempts=*) option_value "$@"; ATTEMPTS="${VALUE}"; shift "${SHIFT_BY}" ;;
+        --retry-delay|--retry-delay=*) option_value "$@"; RETRY_DELAY="${VALUE}"; shift "${SHIFT_BY}" ;;
         -h|--help) usage; exit 0 ;;
         failed|finished)
             if [[ -n "${EVENT}" ]]; then echo "Error: one event only." >&2; exit 1; fi
@@ -82,10 +77,8 @@ if [[ -z "${EVENT}" ]]; then
     usage >&2
     exit 1
 fi
-if ! [[ "${ATTEMPTS}" =~ ^[1-9][0-9]*$ && "${RETRY_DELAY}" =~ ^[0-9]+$ ]]; then
-    echo "Error: --attempts takes a positive number, --retry-delay a number of seconds." >&2
-    exit 1
-fi
+positive_integer --attempts "${ATTEMPTS}"
+seconds --retry-delay "${RETRY_DELAY}"
 github_repo --repo "${REPO}"
 if ! command -v gh >/dev/null 2>&1; then
     echo "Error: gh (GitHub CLI) is needed." >&2
@@ -173,7 +166,7 @@ fi
 RESULT="$(monitor MONITOR_SERVICE_RESULT)"
 STATUS="$(monitor MONITOR_EXIT_STATUS)"
 case "${RESULT}/${STATUS}" in
-    exit-code/3) WHAT="The collection finished behind: a source may have stopped publishing (the flags tell which)." ;;
+    exit-code/"${BEHIND}") WHAT="The collection finished behind: a source may have stopped publishing (the flags tell which)." ;;
     exit-code/*) WHAT="A download failed, or the heartbeat could not be checked." ;;
     timeout/*) WHAT="The collection timed out (TimeoutStartSec): it hung." ;;
     signal/*|core-dump/*) WHAT="The collection was stopped by a signal." ;;

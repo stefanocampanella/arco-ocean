@@ -7,8 +7,8 @@
 # Collect the ARCO-OCEAN forecast runs, at every resolution, with scripts/download.sh.
 #
 # Daily (systemd/arco-ocean-forecast.timer), it adds the runs after each repository's last one
-# up to today's (arco-make download --extend: a day missed is caught up the next time, its GLO12
-# values then from later releases, flagged). The first time, --start backfills from that day (the end of the historical
+# up to today's (arco-make download --extend: a day missed is caught up the next time, its
+# GLO12 values then from later releases, flagged). The first time, --start backfills from that day (the end of the historical
 # dataset). The forecast recipes (configs/download/forecast_res-<res>.toml) keep the last five
 # years of runs. A run fails while one of its sources has not published it yet (a release
 # late): it is attempted again (--attempts, --retry-delay), and else caught up the next day.
@@ -88,30 +88,24 @@ while [[ $# -gt 0 ]]; do
     common_option "$@"
     if [[ ${SHIFT_BY} -gt 0 ]]; then shift "${SHIFT_BY}"; continue; fi
     case "$1" in
-        --res) RESOLUTIONS="$2"; shift 2 ;;
-        --res=*) RESOLUTIONS="${1#*=}"; shift ;;
-        --start) START_DATE="$2"; shift 2 ;;
-        --start=*) START_DATE="${1#*=}"; shift ;;
-        --end) END_DATE="$2"; shift 2 ;;
-        --end=*) END_DATE="${1#*=}"; shift ;;
-        --attempts) ATTEMPTS="$2"; shift 2 ;;
-        --attempts=*) ATTEMPTS="${1#*=}"; shift ;;
-        --retry-delay) RETRY_DELAY="$2"; shift 2 ;;
-        --retry-delay=*) RETRY_DELAY="${1#*=}"; shift ;;
-        --status-url) STATUS_URL="$2"; shift 2 ;;
-        --status-url=*) STATUS_URL="${1#*=}"; shift ;;
-        --heartbeat) HEARTBEAT="$2"; shift 2 ;;
-        --heartbeat=*) HEARTBEAT="${1#*=}"; shift ;;
-        --missing-after) MISSING_AFTER="$2"; shift 2 ;;
-        --missing-after=*) MISSING_AFTER="${1#*=}"; shift ;;
-        --stale-after) STALE_AFTER="$2"; shift 2 ;;
-        --stale-after=*) STALE_AFTER="${1#*=}"; shift ;;
+        --res|--res=*) option_value "$@"; RESOLUTIONS="${VALUE}"; shift "${SHIFT_BY}" ;;
+        --start|--start=*) option_value "$@"; START_DATE="${VALUE}"; shift "${SHIFT_BY}" ;;
+        --end|--end=*) option_value "$@"; END_DATE="${VALUE}"; shift "${SHIFT_BY}" ;;
+        --attempts|--attempts=*) option_value "$@"; ATTEMPTS="${VALUE}"; shift "${SHIFT_BY}" ;;
+        --retry-delay|--retry-delay=*) option_value "$@"; RETRY_DELAY="${VALUE}"; shift "${SHIFT_BY}" ;;
+        --status-url|--status-url=*) option_value "$@"; STATUS_URL="${VALUE}"; shift "${SHIFT_BY}" ;;
+        --heartbeat|--heartbeat=*) option_value "$@"; HEARTBEAT="${VALUE}"; shift "${SHIFT_BY}" ;;
+        --missing-after|--missing-after=*) option_value "$@"; MISSING_AFTER="${VALUE}"; shift "${SHIFT_BY}" ;;
+        --stale-after|--stale-after=*) option_value "$@"; STALE_AFTER="${VALUE}"; shift "${SHIFT_BY}" ;;
         -h|--help) usage; exit 0 ;;
         *) echo "Error: unrecognized argument '$1'." >&2; usage >&2; exit 1 ;;
     esac
 done
 
 positive_integer --heartbeat "${HEARTBEAT}"
+# Checked here too: download.sh would refuse them for every resolution, after the start.
+positive_integer --attempts "${ATTEMPTS}"
+seconds --retry-delay "${RETRY_DELAY}"
 # Positive: the page and the heartbeat read 0 as their default, two days.
 if ! [[ "${MISSING_AFTER}" =~ ^[0-9]+([.][0-9]+)?$ ]] || [[ "${MISSING_AFTER}" =~ ^0+([.]0+)?$ ]]; then
     die "--missing-after takes a positive number of days (got '${MISSING_AFTER}')."
@@ -252,7 +246,7 @@ if [[ ${#WAITING[@]} -gt 0 ]]; then
     echo "Forecast collection: the newest run is not published yet at ${WAITING[*]}; the next run catches up." >&2
     overdue
     # Not a failure (the unit counts it a success), but not every run stored: 75, as download.sh.
-    exit 75
+    exit "${NOT_PUBLISHED}"
 fi
 status end finished
 overdue

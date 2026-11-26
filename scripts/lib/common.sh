@@ -56,22 +56,31 @@ common_defaults() {
     RUNNER_OPTIONS=()
 }
 
+# The value of the option at the start of "$@", as `--option VALUE` or `--option=VALUE`: set VALUE,
+# and SHIFT_BY to the number of arguments it took; exit if there is none (`shift 2` would not
+# shift, and the caller's loop would not end).
+option_value() {
+    if [[ "$1" == *=* ]]; then
+        VALUE="${1#*=}"
+        SHIFT_BY=1
+    elif [[ $# -ge 2 ]]; then
+        VALUE="$2"
+        SHIFT_BY=2
+    else
+        die "$1 needs a value."
+    fi
+}
+
 # Read one of the shared options at the start of "$@": set its variable and SHIFT_BY to the
-# number of arguments it took (0: not a shared option). As `--option VALUE` or `--option=VALUE`.
+# number of arguments it took (0: not a shared option).
 common_option() {
-    local option="${1%%=*}" value="" taken=1
+    local option="${1%%=*}" value
     case "${option}" in
         --project-dir|--config-dir|--log-dir|--log-level|--data-root|--image|--virtual-env|--env-file|--bind) ;;
         *) SHIFT_BY=0; return 0 ;;
     esac
-    if [[ "$1" == *=* ]]; then
-        value="${1#*=}"
-    elif [[ $# -ge 2 ]]; then
-        value="$2"
-        taken=2
-    else
-        die "${option} needs a value."
-    fi
+    option_value "$@"
+    value="${VALUE}"
     case "${option}" in
         --project-dir) PROJECT_ROOT="${value}" ;;
         --config-dir) CONFIG_DIR="${value}"; RUNNER_OPTIONS+=(--config-dir "${value}") ;;
@@ -83,7 +92,6 @@ common_option() {
         --env-file) ENV_FILE="${value}"; RUNNER_OPTIONS+=(--env-file "${value}") ;;
         --bind) BINDS+=("${value}"); RUNNER_OPTIONS+=(--bind "${value}") ;;
     esac
-    SHIFT_BY=${taken}
 }
 
 # The shared options' help, for the scripts' usage. Usage: common_usage KIND (download, ...).
@@ -120,6 +128,9 @@ seconds() {
 enter_project() {
     PROJECT_ROOT="${PROJECT_ROOT:-$(pwd)}"
     cd "${PROJECT_ROOT}" || die "cannot enter the project directory '${PROJECT_ROOT}'."
+    # Absolute: the paths made from it are used from inside it (a relative one would be
+    # resolved twice).
+    PROJECT_ROOT="$(pwd)"
     resolve_data_root "${ENV_FILE}" "${ROOT_GIVEN}" "${ROOT_OPTION}" || exit 1
 }
 

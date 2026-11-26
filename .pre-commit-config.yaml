@@ -48,7 +48,8 @@ repos:
         name: scripts' tests (bats)
         entry: tests/bats/helpers/bats-core/bin/bats tests/bats
         language: system
-        files: ^(scripts|systemd|tests/bats)/
+        # The heartbeat's tests run the package: src/arco_ocean too.
+        files: ^(scripts|systemd|src/arco_ocean|tests/bats)/
         pass_filenames: false
 
   - repo: https://github.com/shellcheck-py/shellcheck-py

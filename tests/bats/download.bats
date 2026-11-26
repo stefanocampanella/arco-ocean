@@ -102,3 +102,21 @@ resume() {
     assert_line --index 1 --partial "--extend --"
     refute_line --index 1 --partial "--resume"
 }
+
+@test "an option of its own given last without its value is refused, not looped on" {
+    # `shift 2` on the last argument does not shift: the loop never ended (review of #33).
+    run timeout 20 bash "${REPO}/scripts/download.sh" forecast_res-1p0 --end
+    assert_failure 1
+    assert_output "Error: --end needs a value."
+}
+
+@test "a relative --project-dir, from its parent" {
+    # The paths made from it were resolved again from inside it (review of #33).
+    cd "$(dirname "${PROJECT}")"
+    run bash "${REPO}/scripts/download.sh" --project-dir "$(basename "${PROJECT}")" \
+        --virtual-env "${PROJECT}/venv" --env-file "" --extend --resume --end 2026-11-25 \
+        --attempts 1 forecast_res-1p0
+    assert_success
+    run calls
+    assert_output --partial " ${PROJECT}/configs/download/forecast_res-1p0.toml ${PROJECT}/data/forecast/res=1p0"
+}

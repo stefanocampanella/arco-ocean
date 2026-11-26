@@ -57,15 +57,12 @@ while [[ $# -gt 0 ]]; do
     common_option "$@"
     if [[ ${SHIFT_BY} -gt 0 ]]; then shift "${SHIFT_BY}"; continue; fi
     case "$1" in
-        --input) INPUT="$2"; shift 2 ;;
-        --input=*) INPUT="${1#*=}"; shift ;;
-        --output) OUTPUT="$2"; shift 2 ;;
-        --output=*) OUTPUT="${1#*=}"; shift ;;
+        --input|--input=*) option_value "$@"; INPUT="${VALUE}"; shift "${SHIFT_BY}" ;;
+        --output|--output=*) option_value "$@"; OUTPUT="${VALUE}"; shift "${SHIFT_BY}" ;;
         --streaming) STREAMING=true; shift ;;
         --graph) STREAMING=false; shift ;;
         --replace) REPLACE=true; shift ;;
-        --dask-setup) DASK_SETUP="$2"; shift 2 ;;
-        --dask-setup=*) DASK_SETUP="${1#*=}"; shift ;;
+        --dask-setup|--dask-setup=*) option_value "$@"; DASK_SETUP="${VALUE}"; shift "${SHIFT_BY}" ;;
         -h|--help) usage; exit 0 ;;
         --) shift; POSITIONAL_ARGS+=("$@"); break ;;
         -*) echo "Error: unrecognized option '$1'." >&2; usage >&2; exit 1 ;;

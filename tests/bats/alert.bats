@@ -109,7 +109,10 @@ body() {
     assert_line --index 2 --regexp "^gh issue list "
     alert --attempts 0 failed
     assert_failure 1
-    assert_output --partial "--attempts takes a positive number"
+    assert_output "Error: --attempts takes a positive integer (got '0')."
+    run timeout 20 bash "${REPO}/scripts/alert.sh" failed --repo
+    assert_failure 1
+    assert_output "Error: --repo needs a value."
 }
 
 @test "one event is needed" {

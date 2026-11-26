@@ -192,3 +192,18 @@ published() {
     assert_output --partial "1.0° has no run stored"
     assert_equal "$(published 'd["state"], d["resolutions"][0]["state"]')" "('finished', 'finished')"
 }
+
+@test "its own options are checked before the collection starts" {
+    run timeout 20 bash "${PROJECT}/scripts/forecast.sh" --project-dir "${PROJECT}" --res
+    assert_failure 1
+    assert_output "Error: --res needs a value."
+    # Refused by every download after the start, --attempts 0 would abort the collection and
+    # open an issue: a usage error instead (review of #33).
+    forecast --attempts 0
+    assert_failure 1
+    assert_output "Error: --attempts takes a positive integer (got '0')."
+    forecast --retry-delay soon
+    assert_output "Error: --retry-delay takes a number of seconds (got 'soon')."
+    assert_file_not_exists "${PUBLISHED}"
+    assert_file_not_exists "${CALLS}"
+}

@@ -79,10 +79,10 @@ EOF
 
 @test "other keys are ignored with a warning" {
     # arco-make's settings belong in ~/.arcomakerc: the scripts do not export them.
-    printf 'TMPDIR=/x\nDATA_ROOT= /data/arco-ocean \n' > "${SETTINGS}"
+    printf 'TMPDIR=/x\nDATA_ROOT= /srv/outputs \n' > "${SETTINGS}"
     resolve
     assert_success
-    assert_line "/data/arco-ocean/historical/res=0p25"
+    assert_line "/srv/outputs/historical/res=0p25"
     assert_output --partial "'TMPDIR' is not a setting of the scripts"
 }
 
@@ -137,6 +137,9 @@ options() {
     options --image
     assert_failure
     assert_output "Error: --image needs a value."
+    options --bind=
+    assert_success
+    assert_line --partial "binds= "
 }
 
 @test "the default image is the pinned one, shown in the help" {

@@ -53,8 +53,7 @@ OPTIONS=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --alerts) ALERTS=true; shift ;;
-        --alert-repo) ALERT_REPO="$2"; shift 2 ;;
-        --alert-repo=*) ALERT_REPO="${1#*=}"; shift ;;
+        --alert-repo|--alert-repo=*) option_value "$@"; ALERT_REPO="${VALUE}"; shift "${SHIFT_BY}" ;;
         --no-start) START=false; shift ;;
         --uninstall) UNINSTALL=true; shift ;;
         -h|--help) usage; exit 0 ;;

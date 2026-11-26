@@ -73,19 +73,14 @@ while [[ $# -gt 0 ]]; do
     common_option "$@"
     if [[ ${SHIFT_BY} -gt 0 ]]; then shift "${SHIFT_BY}"; continue; fi
     case "$1" in
-        --output) OUTPUT="$2"; shift 2 ;;
-        --output=*) OUTPUT="${1#*=}"; shift ;;
-        --start) START_DATE="$2"; shift 2 ;;
-        --start=*) START_DATE="${1#*=}"; shift ;;
-        --end) END_DATE="$2"; shift 2 ;;
-        --end=*) END_DATE="${1#*=}"; shift ;;
+        --output|--output=*) option_value "$@"; OUTPUT="${VALUE}"; shift "${SHIFT_BY}" ;;
+        --start|--start=*) option_value "$@"; START_DATE="${VALUE}"; shift "${SHIFT_BY}" ;;
+        --end|--end=*) option_value "$@"; END_DATE="${VALUE}"; shift "${SHIFT_BY}" ;;
         --replace) REPLACE=true; shift ;;
         --extend) EXTEND=true; shift ;;
         --resume) RESUME=true; shift ;;
-        --attempts) ATTEMPTS="$2"; shift 2 ;;
-        --attempts=*) ATTEMPTS="${1#*=}"; shift ;;
-        --retry-delay) RETRY_DELAY="$2"; shift 2 ;;
-        --retry-delay=*) RETRY_DELAY="${1#*=}"; shift ;;
+        --attempts|--attempts=*) option_value "$@"; ATTEMPTS="${VALUE}"; shift "${SHIFT_BY}" ;;
+        --retry-delay|--retry-delay=*) option_value "$@"; RETRY_DELAY="${VALUE}"; shift "${SHIFT_BY}" ;;
         -h|--help) usage; exit 0 ;;
         --) shift; POSITIONAL_ARGS+=("$@"); break ;;
         -*) echo "Error: unrecognized option '$1'." >&2; usage >&2; exit 1 ;;
