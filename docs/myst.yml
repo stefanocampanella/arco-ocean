@@ -22,7 +22,6 @@ project:
     - file: data.md
     - file: access.md
     - file: sources.md
-    - file: notebooks/coarsening.ipynb
     - file: producing.md
     - file: forecasts.md
     # Every notebook site.sh exports.

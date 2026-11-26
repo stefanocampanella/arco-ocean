@@ -39,13 +39,6 @@ with app.setup:
     GAP_DAYS = ["1993-01-01", "2013-01-01", "2021-06-30"]
 
 
-@app.cell
-def _():
-    # The examples on the real sources (Copernicus Marine credentials): `-- --live`.
-    LIVE = "live" in mo.cli_args()
-    return (LIVE,)
-
-
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
@@ -70,6 +63,13 @@ def _():
       their numbers are those of the days they read.
     """)
     return
+
+
+@app.cell
+def _():
+    # The examples on the real sources (Copernicus Marine credentials): `-- --live`.
+    LIVE = "live" in mo.cli_args()
+    return (LIVE,)
 
 
 @app.cell(hide_code=True)
