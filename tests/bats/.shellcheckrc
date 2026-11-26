@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: 2026 Stefano Campanella
+# SPDX-License-Identifier: MIT
+# ShellCheck for the bats tests (the nearest .shellcheckrc wins: the repository's settings too).
+source-path=SCRIPTDIR
+external-sources=true
+# Code in single quotes runs later, in `bash -c` or in a stand-in: its expansions are meant.
+# REPO, PROJECT and the like come from common.bash, which bats loads at run time.
+disable=SC2016,SC2153

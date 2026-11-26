@@ -42,6 +42,14 @@ repos:
         language: system
         files: ^site/.*\.(js|mjs)$
         pass_filenames: false
+      # The scripts' tests (tests/bats; the libraries are submodules: git submodule update
+      # --init). The heartbeat's need the project's environment (uv sync), else they are skipped.
+      - id: bats
+        name: scripts' tests (bats)
+        entry: tests/bats/helpers/bats-core/bin/bats tests/bats
+        language: system
+        files: ^(scripts|systemd|tests/bats)/
+        pass_filenames: false
 
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: v0.11.0.1

@@ -291,12 +291,20 @@ schedule; the installer removes the keepalive's units where it finds them.
 ### Checks
 
 `uvx pre-commit run --all-files` runs the checks made before each commit: TOML and YAML syntax,
-ruff, ty, ShellCheck, REUSE and a secret scan. `uv run --frozen pytest` (tests/python, with a
-coverage of the package of at least 80 % in CI) loads every recipe with the models of the pinned arco-make (an unknown key, step or argument fails),
-runs the examples of the coarsening notes, and tests the forecast heartbeat and the systemd units
-(their installer and the alerts, with stand-ins for `systemctl` and `gh`; the units checked by
-`systemd-analyze verify`); the pre-commit checks also test the web page's logic
-(`node --test site/status.test.mjs`, Node.js from `uvx`). CI runs both on every pull request.
+ruff, ty, ShellCheck, the web page's tests (`node --test`, Node.js from `uvx`), the scripts'
+tests, REUSE and a secret scan. CI runs them on every pull request, and:
+
+- `uv run --frozen pytest` (`tests/python`; a coverage of the package of at least 80 %): every
+  recipe loaded with the models of the pinned arco-make (an unknown key, step or argument
+  fails), the examples of the coarsening notes, and the forecast heartbeat.
+- `tests/bats/helpers/bats-core/bin/bats tests/bats`: the scripts and the systemd units, with
+  [bats-core](https://bats-core.readthedocs.io), its libraries (bats-support, bats-assert,
+  bats-file) as git submodules in `tests/bats/helpers` (after a clone: `git submodule update
+  --init`). One file per script; each test runs in a project directory of its own, with
+  stand-ins first on `PATH` for the commands the scripts call (`arco-make`, `systemctl`, `gh`,
+  ...), which record their calls (`tests/bats/common.bash`); the units are checked by
+  `systemd-analyze verify`. The heartbeat's tests run the package's `arco-ocean`: they need the
+  project's environment (`uv sync`) and are skipped without it.
 
 ## Data format
 

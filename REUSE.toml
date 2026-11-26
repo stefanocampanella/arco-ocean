@@ -10,6 +10,7 @@ path = [
   "**.png",
   "pyproject.toml",
   ".gitignore",
+  ".gitmodules",
 ]
 precedence = "closest"
 SPDX-FileCopyrightText = "2026 Stefano Campanella"

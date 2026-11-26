@@ -1,10 +1,10 @@
 # SPDX-FileCopyrightText: 2026 Stefano Campanella
 # SPDX-License-Identifier: MIT
-# The package (src/arco_ocean) and the tests (tests/python), as arco-make's CI: lint, types, and
-# the tests with a coverage gate on the package. They load every recipe with the pinned arco-make,
-# run the coarsening notes' offline examples, and test the scripts and the systemd units. The
-# live examples need credentials and are run by hand (`pytest --live`): never in CI, whose logs
-# are public.
+# The package (src/arco_ocean), as arco-make's CI: lint, types, and the tests (tests/python) with
+# a coverage gate on the package; they also load every recipe with the pinned arco-make and run
+# the coarsening notes' offline examples. The scripts and the systemd units: bats-core
+# (tests/bats), with the project's environment for the heartbeat's tests. The live examples need
+# credentials and are run by hand (`pytest --live`): never in CI, whose logs are public.
 name: ci
 
 on:
@@ -38,3 +38,15 @@ jobs:
           python-version: "3.13"
       - run: uv sync --frozen
       - run: uv run --frozen pytest --cov --cov-report=term-missing --cov-fail-under=80
+
+  bats:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: true  # bats-core and its libraries (tests/bats/helpers)
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.13"
+      - run: uv sync --frozen
+      - run: tests/bats/helpers/bats-core/bin/bats --print-output-on-failure tests/bats
