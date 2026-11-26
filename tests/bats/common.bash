@@ -65,6 +65,13 @@ copy_scripts() {
     done
 }
 
+# A field of the document a test published at $PUBLISHED: python's expression on `d`, the
+# document.
+published() {
+    "${REPO}/.venv/bin/python" -c 'import json, sys; d = json.load(open(sys.argv[1])); print(eval(sys.argv[2]))' \
+        "${PUBLISHED}" "$1"
+}
+
 # Skip a test that runs the package (`arco-ocean`, src/arco_ocean) without its environment.
 needs_package() {
     [[ -x "${REPO}/.venv/bin/arco-ocean" ]] || skip "needs the project's environment: uv sync"

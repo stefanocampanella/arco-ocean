@@ -151,10 +151,10 @@ status() {
 # page calls it stale.
 on_exit() {
     local code=$?
-    if [[ -n "${HEARTBEAT_PID}" ]]; then
-        kill "${HEARTBEAT_PID}" 2>/dev/null
-    fi
-    if [[ "${ENDED}" == false && -n "${HEARTBEAT_PID}" ]]; then
+    local started=false
+    [[ -n "${HEARTBEAT_PID}" ]] && started=true
+    heartbeat_stop
+    if [[ "${ENDED}" == false && "${started}" == true ]]; then
         status end aborted --detail "The collection stopped unexpectedly (exit status ${code})."
     fi
 }
@@ -173,20 +173,8 @@ if [[ -n "${STATUS_URL}" ]]; then
     status start --target-run "$(date -u -d "${END_DATE} - 1 day" +%Y-%m-%d)" \
         --heartbeat-seconds "${HEARTBEAT}" --stale-after-hours "${STALE_AFTER}" \
         --missing-after-days "${MISSING_AFTER}" "${REPOS[@]}"
-    # The beat, until the collection ends. Stopped, it stops its sleep too (else left behind with
-    # the script's output open); it does not hold the collection's lock.
-    (
-        exec 9>&-
-        SLEEP_PID=""
-        trap 'kill "${SLEEP_PID}" 2>/dev/null; exit 0' TERM
-        while true; do
-            sleep "${HEARTBEAT}" &
-            SLEEP_PID=$!
-            wait "${SLEEP_PID}"
-            status beat
-        done
-    ) &
-    HEARTBEAT_PID=$!
+    # The beat, until the collection ends.
+    heartbeat_start "${HEARTBEAT}" status beat
 fi
 
 if [[ -n "${START_DATE}" ]]; then

@@ -50,12 +50,6 @@ forecast() {
         --status-url "${PUBLISHED}" --res 0p5,1p0 --end 2026-11-25 "$@"
 }
 
-# A field of the published document: python's expression on `d`, the document.
-published() {
-    "${REPO}/.venv/bin/python" -c 'import json, sys; d = json.load(open(sys.argv[1])); print(eval(sys.argv[2]))' \
-        "${PUBLISHED}" "$1"
-}
-
 @test "a collection that finishes" {
     FAKE_LATEST="${STORED}" forecast
     assert_success

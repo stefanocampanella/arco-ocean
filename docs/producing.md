@@ -5,8 +5,9 @@ every later extension, and the fingerprint of the recipe recorded in each commit
 
 ```bash
 # The whole period, at one resolution (DATA_ROOT/historical/res=0p25; about four days on the
-# project machine).
-scripts/download.sh --bind /data --start 1993-01-01 --end 2026-07-01 historical_res-0p25
+# project machine), its progress on the web page.
+scripts/download.sh --bind /data --start 1993-01-01 --end 2026-07-01 \
+    --status-url s3://ogs-arco-ocean/status/historical.json historical_res-0p25
 # Later: the days after the last stored one, as a new version, once every source has them as
 # final data (ERA5 lags by about three months).
 scripts/download.sh --bind /data --extend --end 2026-10-01 historical_res-0p25
@@ -41,6 +42,17 @@ source, a forecast run a quarter of an hour. A run that fails anyway is resumed 
 resolution. arco-make plans chunks of up to Dask's `array.chunk-size`: on the project machine,
 `DASK_ARRAY__CHUNK_SIZE=256MiB` in arco-make's settings file (`~/.arcomakerc`), the fastest
 there (Dask's default is 128 MiB).
+
+With `--status-url`, a download publishes its progress, which the home page shows
+(`status/historical.json` in the bucket, for the 0.25° historical download):
+`arco-ocean progress`, run with uv in the checkout, reads how far the download is from the
+repository, as arco-make records it (each block a commit on the run's branch, its interval in the
+commit's metadata), when the download starts, every `--heartbeat` seconds (300) and when it ends.
+The document says "running", "finished" or "failed" (with the exit status), the period, the end
+of the newest block stored, and when the newest block was committed and the document last
+updated (`arco-ocean progress-schema` prints its schema); the repository's path stays in the
+state file, `LOG_DIR/progress_RECIPE.json`. A download killed outright stops updating it, and the
+page calls it stale. A failure to publish it never stops the download (`LOG_DIR/progress.log`).
 
 Each commit of a repository records how it was made, in its metadata: the version and commit of
 arco-make, the versions of the packages that decide the values, and the recipe's fingerprint.
