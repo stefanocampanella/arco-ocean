@@ -24,8 +24,8 @@ dev = [
     "ruff",
     "ty",
 ]
-# The tutorials (tutorials/): `uv run --group notebooks marimo edit tutorials/oni.py`, or in their
-# own environment from their inline metadata (`uvx marimo edit --sandbox tutorials/oni.py`).
+# The notebooks (notebooks/): `uv run --group notebooks marimo edit notebooks/oni.py`, or in their
+# own environment from their inline metadata (`uvx marimo edit --sandbox notebooks/oni.py`).
 notebooks = [
     "xarray>=2025.1.1",
     "numpy",
@@ -62,7 +62,7 @@ indent-width = 2
 
 [tool.ruff.format]
 # marimo writes its notebooks in its own form (4-space indentation) whenever they are saved.
-exclude = ["tutorials/*.py"]
+exclude = ["notebooks/*.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]
@@ -75,7 +75,7 @@ known-first-party = ["arco_ocean"]
 # marimo notebooks: a cell shows its last expression (B018); names come as cell arguments, so ruff
 # reads the strings of `Literal[...]` as names (F821; `marimo check` checks the cells' names); the
 # tutorial's code is kept as adapted (F841).
-"tutorials/*.py" = ["B018", "F821", "F841"]
+"notebooks/*.py" = ["B018", "F821", "F841"]
 
 [tool.ty.environment]
 python-version = "3.13"

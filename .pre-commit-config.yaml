@@ -35,7 +35,7 @@ repos:
         name: marimo check
         entry: uvx marimo@0.25.2 check
         language: system
-        files: ^tutorials/.*\.py$
+        files: ^notebooks/.*\.py$
       - id: site-tests
         name: web page tests (node --test)
         entry: uvx --from nodejs-wheel==24.19.0 node --test 'tests/js/*.test.js'

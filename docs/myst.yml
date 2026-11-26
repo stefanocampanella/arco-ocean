@@ -25,6 +25,9 @@ project:
     - file: coarsen-ocean-datasets.md
     - file: producing.md
     - file: forecasts.md
+    - title: Notebooks
+      children:
+        - file: notebooks/oni.ipynb
     - file: licence.md
     - file: development.md
 site:

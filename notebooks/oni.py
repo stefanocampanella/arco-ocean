@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 Stefano Campanella
 # SPDX-License-Identifier: CC-BY-4.0 AND BSD-3-Clause
 # Adapted from Climatematch's tutorial (text under CC BY 4.0, code under the BSD 3-Clause License).
-# Run it with `uvx marimo edit --sandbox tutorials/oni.py`: the dependencies below are installed in
+# Run it with `uvx marimo edit --sandbox notebooks/oni.py`: the dependencies below are installed in
 # an environment of its own.
 # /// script
 # requires-python = ">=3.13"
@@ -36,7 +36,7 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    A [marimo](https://marimo.io) notebook: run it with `uvx marimo edit --sandbox tutorials/oni.py`
+    A [marimo](https://marimo.io) notebook: run it with `uvx marimo edit --sandbox notebooks/oni.py`
     (or `marimo run` to see it as an app), which installs its dependencies in an environment of its own.
     """)
     return
@@ -128,11 +128,9 @@ def _(mo):
     mo.md(r"""
     To calculate the [Oceanic Niño Index](https://climatedataguide.ucar.edu/climate-data/nino-sst-indices-nino-12-3-34-4-oni-and-tni) (ONI) you will:
 
-    1.  Select SST data and daily climatology from Niño 3.4 region of 5ºN - 5ºS and 190ºE - 240ºE (or 170ºW - 120ºW) shown in the figure below.
+    1.  Select SST data and daily climatology from Niño 3.4 region of 5ºN - 5ºS and 190ºE - 240ºE (or 170ºW - 120ºW), mapped with the other Niño regions on [NOAA NCEI's ENSO page](https://www.ncei.noaa.gov/access/monitoring/enso/sst).
     2.  Compute the daily anomaly and its area-weighted mean for the Niño 3.4 region to obtain a time series.
     3.  Smooth the time series with a 90 days (3-month) running mean.
-
-    ![](https://www.ncdc.noaa.gov/monitoring-content/teleconnections/nino-regions.gif)
     """)
     return
 

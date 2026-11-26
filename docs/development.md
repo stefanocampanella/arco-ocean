@@ -6,7 +6,7 @@ license: CC-BY-4.0
 
 The repository holds the recipes (`configs/`), the scripts that run them (`scripts/`, bash),
 the package of ARCO-OCEAN's own code (`src/arco_ocean`: the forecast collection's heartbeat), the
-notebooks (`tutorials/`) and this site (`docs/`). The datasets are made by
+notebooks (`notebooks/`) and this site (`docs/`). The datasets are made by
 [arco-make](https://github.com/stefanocampanella/arco-make), from its released image.
 
 ## Checks
@@ -33,13 +33,13 @@ them on every pull request, and:
 ## The site
 
 This site is built by [mystmd](https://mystmd.org), the engine of Jupyter Book 2, from the pages
-in `docs/` (`docs/myst.yml` lists them), and deployed to GitHub Pages from `main` by
+in `docs/` (`docs/myst.yml` lists them) and the marimo notebooks of `notebooks/`, exported to
+pages first (their text and code, not run), and deployed to GitHub Pages from `main` by
 `.github/workflows/pages.yml` (Pages enabled once, with "GitHub Actions" as source). Each fact is
 written once, here; the README points to these pages. To preview it:
 
 ```bash
-cd docs
-uvx --from mystmd --with nodejs-wheel myst start   # http://localhost:3000
+scripts/site.sh start   # http://localhost:3000
 ```
 
 The forecast collection's state on the home page is a MyST `{anywidget}`,

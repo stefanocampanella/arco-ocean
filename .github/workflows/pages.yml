@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2026 Stefano Campanella
 # SPDX-License-Identifier: MIT
-# The site (docs/, mystmd) on GitHub Pages, deployed from main; built, not deployed, on pull
+# The site (docs/ and the notebooks, scripts/site.sh) on GitHub Pages, deployed from main; built, not deployed, on pull
 # requests, so that a page that does not build fails them. Pages must be enabled once, with
 # "GitHub Actions" as source (Settings, Pages).
 name: pages
@@ -8,9 +8,9 @@ name: pages
 on:
   push:
     branches: [ main ]
-    paths: [ "docs/**", ".github/workflows/pages.yml" ]
+    paths: [ "docs/**", "notebooks/**", "scripts/site.sh", ".github/workflows/pages.yml" ]
   pull_request:
-    paths: [ "docs/**", ".github/workflows/pages.yml" ]
+    paths: [ "docs/**", "notebooks/**", "scripts/site.sh", ".github/workflows/pages.yml" ]
   workflow_dispatch:
 
 permissions:
@@ -20,23 +20,17 @@ concurrency:
   group: pages-${{ github.ref }}
   cancel-in-progress: false
 
-env:
-  # The versions of the build, as the checks run Node.js (.pre-commit-config.yaml).
-  MYSTMD: mystmd==1.14.0
-  NODEJS: nodejs-wheel==24.19.0
-
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
-      - name: Build the site
-        working-directory: docs
+      - name: Build the site (the notebooks exported to pages, then mystmd)
         env:
           # The site is served under /arco-ocean/ (a project's Pages).
           BASE_URL: /${{ github.event.repository.name }}
-        run: uvx --from "${MYSTMD}" --with "${NODEJS}" myst build --html --strict --ci < /dev/null
+        run: scripts/site.sh build --strict
       - uses: actions/upload-pages-artifact@v5
         with:
           path: docs/_build/html

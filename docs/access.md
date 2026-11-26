@@ -32,6 +32,6 @@ The first version of ARCO-OCEAN (0.25°, 10 levels, waves, Zarr version 2) stays
 
 ## Tutorials
 
-1. [Computing the Oceanic El Nino Index (ONI) with Xarray and ARCO-OCEAN](https://github.com/stefanocampanella/arco-ocean/blob/main/tutorials/oni.py) (written for the first version: its paths and variables are those of the 0.25°, 10-level dataset)
+1. [Computing the Oceanic El Nino Index (ONI) with Xarray and ARCO-OCEAN](https://github.com/stefanocampanella/arco-ocean/blob/main/notebooks/oni.py) (written for the first version: its paths and variables are those of the 0.25°, 10-level dataset)
 
-The tutorials are [marimo](https://marimo.io) notebooks: `uvx marimo edit --sandbox tutorials/oni.py` opens one in an environment of its own, with the dependencies it lists.
+The tutorials are [marimo](https://marimo.io) notebooks, also shown on this site ([Notebooks](notebooks/oni.ipynb)): `uvx marimo edit --sandbox notebooks/oni.py` opens one in an environment of its own, with the dependencies it lists.
