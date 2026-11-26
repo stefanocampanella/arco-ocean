@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Stefano Campanella
 // SPDX-License-Identifier: MIT
 //
-// The web page's judgement of the heartbeat (docs/assets/js/forecast.js): node --test tests/js/*.test.js
+// The web page's judgement of the heartbeat (docs/assets/js/status.js): node --test tests/js/*.test.js
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -17,7 +17,7 @@ import {
   runAgeDays,
   statusUrl,
   utc,
-} from "../../docs/assets/js/forecast.js";
+} from "../../docs/assets/js/status.js";
 // A heartbeat as `arco-ocean status` publishes it (tests/python/test_js_fixtures.py checks it
 // against the package's models): a collection running at 12:28 on 24 Nov 2026.
 import running from "./fixtures/heartbeat.json" with { type: "json" };

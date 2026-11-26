@@ -2,8 +2,8 @@
 SPDX-FileCopyrightText: 2026 Stefano Campanella
 SPDX-License-Identifier: MIT
 
-The forecast dashboard's styles (forecast.js), inside its shadow DOM: text colours are the
-page's (inherited); the status colours are fixed, each shown with an icon and a label, never alone.
+The cards' styles (status.js), inside their shadow DOM: text colours are the page's
+(inherited); the status colours are fixed, each shown with an icon and a label, never alone.
 */
 
 :host {
@@ -91,6 +91,14 @@ page's (inherited); the status colours are fixed, each shown with an icon and a 
   margin: 0.5rem 0;
 }
 
+.status-progress {
+  display: block;
+  width: 100%;
+  height: 0.6rem;
+  margin: 0.5rem 0;
+  accent-color: var(--accent);
+}
+
 .status-times {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
@@ -106,6 +114,10 @@ page's (inherited); the status colours are fixed, each shown with an icon and a 
 .status-times dd {
   margin: 0;
   font-variant-numeric: tabular-nums;
+}
+
+.date {
+  white-space: nowrap;
 }
 
 .table-wrap {

@@ -1,16 +1,23 @@
 // SPDX-FileCopyrightText: 2026 Stefano Campanella
 // SPDX-License-Identifier: MIT
 //
-// The forecast collection on the web page: its state, judged from its heartbeat (`arco-ocean
-// status` writes it; `arco-ocean heartbeat-schema` prints the document's schema), and the
-// dashboard that shows it, a MyST `{anywidget}` (docs/index.md). One module: the directive copies
-// this file alone, so it imports nothing. The judgement is pure functions, tested by
-// tests/js/forecast.test.js; the widget reads the heartbeat every minute.
-// `?status=URL` in the page's address reads another heartbeat (a test copy, say).
-// Nothing here runs on import: Node's tests import it without a page.
+// The state of what makes ARCO-OCEAN, on the web page, a MyST `{anywidget}` (docs/index.md) with
+// two cards, chosen by the directive's JSON:
+// - {} or {"show": "forecast"}: the forecast collection, judged from its heartbeat (`arco-ocean
+//   status` writes it; `arco-ocean heartbeat-schema` prints the document's schema);
+// - {"show": "historical"}: the historical download, run once, judged from its progress
+//   (`arco-ocean progress`, through scripts/download.sh --status-url; `arco-ocean
+//   progress-schema`).
+// One module: the directive copies this file alone, so it imports nothing. The judgements are
+// pure functions, tested by tests/js/*.test.js; the widget reads its document every minute.
+// `?status=URL` (the forecast's) and `?progress=URL` (the historical's) in the page's address read
+// other documents (a test copy, say). Nothing here runs on import: Node's tests import it without
+// a page.
 
 export const DEFAULT_STATUS_URL =
   "https://ogs-arco-ocean.s3.eu-south-1.amazonaws.com/status/forecast.json";
+export const DEFAULT_PROGRESS_URL =
+  "https://ogs-arco-ocean.s3.eu-south-1.amazonaws.com/status/historical.json";
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
@@ -200,6 +207,104 @@ export function runAgeDays(latestRun, now = Date.now()) {
   return Math.round((today - run) / DAY);
 }
 
+// --- The historical download -------------------------------------------------------------------
+
+// The share of [start, end) downloaded, from 0 to 1, or null if a date is missing.
+export function fraction(progress) {
+  const start = day(progress?.start);
+  const end = day(progress?.end);
+  const done = day(progress?.done_until);
+  if (start === null || end === null || done === null || !(end > start)) return null;
+  return Math.min(1, Math.max(0, (done - start) / (end - start)));
+}
+
+// The day before "YYYY-MM-DD" (an end, excluded, as the last day), or "–".
+export function dayBefore(value) {
+  const time = day(value);
+  return time === null ? "–" : new Date(time - DAY).toISOString().slice(0, 10);
+}
+
+// "1993-01-01 to 2026-06-30": the first and the last day.
+export function period(progress) {
+  return `${progress.start ?? "–"} to ${dayBefore(progress.end)}`;
+}
+
+// "12 %": rounded down, so that 100 % means every day.
+export function percent(share) {
+  return `${Math.floor(share * 100)} %`;
+}
+
+// "up to 1997-03-14 (12 %)", or "" if nothing is stored yet.
+function doneText(progress) {
+  if (!progress.done_until) return "";
+  const share = fraction(progress);
+  return `up to ${progress.done_until}${share === null ? "" : ` (${percent(share)})`}`;
+}
+
+// The download's state as the page shows it: downloading, finished, failed (status "aborted"),
+// stale or unknown, with a sentence. A finished download stays finished: it is run once.
+export function assessProgress(progress, now = Date.now()) {
+  if (!progress || typeof progress !== "object") {
+    return {
+      status: "unknown",
+      label: "Unknown",
+      detail:
+        "The progress could not be read: no download has published it yet, or the bucket " +
+        "cannot be reached.",
+    };
+  }
+  if (progress.schema !== 1) {
+    return {
+      status: "unknown",
+      label: "Unknown",
+      detail: `The progress has an unknown format (schema ${progress.schema}).`,
+    };
+  }
+  const done = doneText(progress);
+  const unread = progress.error ? ` (${progress.error}: the next update tries again)` : "";
+  if (progress.state === "running") {
+    const silence = now - Date.parse(progress.updated_at);
+    const beat = (Number(progress.heartbeat_seconds) || 300) * 1000;
+    if (!(silence <= Math.max(MISSED_BEATS * beat, MIN_SILENCE))) {
+      return {
+        status: "stale",
+        label: "Stale",
+        detail:
+          `No update for ${duration(silence)}: the download stopped without reporting (the ` +
+          `machine down or the process killed)${done ? `, stored ${done}` : ""}. Rerun it with ` +
+          "--resume.",
+      };
+    }
+    return {
+      status: "downloading",
+      label: "Downloading",
+      detail: done
+        ? `Stored ${done}, block after block.${unread}`
+        : `Writing the first block.${unread}`,
+    };
+  }
+  if (progress.state === "finished") {
+    return {
+      status: "finished",
+      label: "Finished",
+      detail: progress.detail ?? `Every day from ${period(progress)} is stored.`,
+    };
+  }
+  if (progress.state === "failed") {
+    const stored = done ? ` Stored ${done}.` : "";
+    return {
+      status: "aborted",
+      label: "Failed",
+      detail: `${progress.detail ?? "The download failed: rerun it with --resume."}${stored}`,
+    };
+  }
+  return {
+    status: "unknown",
+    label: "Unknown",
+    detail: `The progress has an unknown state (${progress.state}).`,
+  };
+}
+
 // --- The dashboard -------------------------------------------------------------------------------
 
 const REFRESH_MS = 60 * 1000;
@@ -230,6 +335,32 @@ const MARKUP = `
   </div>
   <p class="note">Checked at <span data-field="checked">–</span>; checked again every minute.</p>
 `;
+
+const PROGRESS_MARKUP = `
+  <div class="status-card" data-status="unknown" aria-live="polite">
+    <div class="status-head">
+      <span class="status-icon" aria-hidden="true">?</span>
+      <span class="status-label">Checking…</span>
+    </div>
+    <p class="status-detail">Reading the progress.</p>
+    <progress class="status-progress" max="1" aria-label="Share of the period stored"></progress>
+    <dl class="status-times">
+      <div><dt>Period</dt><dd data-field="period">–</dd></div>
+      <div><dt>Stored up to</dt><dd data-field="done">–</dd></div>
+      <div><dt>Last block committed</dt><dd data-field="commit">–</dd></div>
+      <div><dt>Started</dt><dd data-field="started">–</dd></div>
+      <div><dt>Last update</dt><dd data-field="updated">–</dd></div>
+      <div><dt>Ended</dt><dd data-field="ended">–</dd></div>
+    </dl>
+  </div>
+  <p class="note">Checked at <span data-field="checked">–</span>; checked again every minute.</p>
+`;
+
+// "2026-11-24 12:00 UTC (5 min ago)", or "–".
+function ago(iso, now) {
+  const time = Date.parse(iso);
+  return Number.isNaN(time) ? "–" : `${utc(iso)} (${duration(now - time)} ago)`;
+}
 
 async function fetchHeartbeat(url) {
   try {
@@ -282,17 +413,85 @@ export function show(el, heartbeat, now) {
   field("checked").textContent = utc(new Date(now).toISOString());
 }
 
+// Set a field's text, each date in it kept on one line (a line may break at a hyphen).
+function setDates(element, text) {
+  element.replaceChildren(
+    ...text.split(/(\d{4}-\d{2}-\d{2})/).map((piece, i) => {
+      if (i % 2 === 0) return piece;
+      const date = document.createElement("span");
+      date.className = "date";
+      date.textContent = piece;
+      return date;
+    }),
+  );
+}
+
+// Show the download's progress in the widget's element, as judged at `now`.
+export function showProgress(el, progress, now) {
+  const verdict = assessProgress(progress, now);
+  const field = (name) => el.querySelector(`[data-field="${name}"]`);
+  el.querySelector(".status-card").dataset.status = verdict.status;
+  el.querySelector(".status-icon").textContent = ICONS[verdict.status];
+  el.querySelector(".status-label").textContent = verdict.label;
+  el.querySelector(".status-detail").textContent = verdict.detail;
+
+  const ok = progress && progress.schema === 1;
+  const bar = el.querySelector(".status-progress");
+  const share = ok ? fraction(progress) : null;
+  // No value: an indeterminate bar (nothing stored yet, or unknown).
+  if (share === null) {
+    bar.removeAttribute("value");
+  } else {
+    bar.value = share;
+  }
+  bar.textContent = share === null ? "" : percent(share);
+  setDates(field("period"), ok ? period(progress) : "–");
+  setDates(
+    field("done"),
+    ok && progress.done_until
+      ? `${progress.done_until}${share === null ? "" : ` (${percent(share)})`}`
+      : "–",
+  );
+  setDates(field("commit"), ok ? ago(progress.last_commit_at, now) : "–");
+  setDates(field("started"), ok ? utc(progress.started_at) : "–");
+  setDates(field("updated"), ok ? ago(progress.updated_at, now) : "–");
+  setDates(field("ended"), ok && progress.ended_at ? utc(progress.ended_at) : "–");
+  field("checked").textContent = utc(new Date(now).toISOString());
+}
+
 // The heartbeat's URL: the page's ?status=, else the bucket's (written once, here).
 export function statusUrl(search) {
   return new URLSearchParams(search).get("status") || DEFAULT_STATUS_URL;
 }
 
-function render({ el }) {
+// The progress's URL: the page's ?progress=, else the bucket's.
+export function progressUrl(search) {
+  return new URLSearchParams(search).get("progress") || DEFAULT_PROGRESS_URL;
+}
+
+// The cards, by the directive's "show".
+export const CARDS = {
+  forecast: { markup: MARKUP, url: statusUrl, show },
+  historical: { markup: PROGRESS_MARKUP, url: progressUrl, show: showProgress },
+};
+
+// The card a widget shows: its model's "show" (the directive's JSON), the forecast's by default.
+export function card(name) {
+  return CARDS[name ?? "forecast"] ?? null;
+}
+
+function render({ model, el }) {
+  const name = model?.get?.("show");
+  const chosen = card(name);
+  if (chosen === null) {
+    el.textContent = `Unknown card "${name}": give "forecast" or "historical".`;
+    return () => el.replaceChildren();
+  }
   // Appended, not el.innerHTML: the page's renderer puts the widget's stylesheet in el.
   const root = document.createElement("div");
-  root.innerHTML = MARKUP;
+  root.innerHTML = chosen.markup;
   el.append(root);
-  const url = statusUrl(window.location.search);
+  const url = chosen.url(window.location.search);
   // Only the newest refresh shows: a slow answer does not overwrite a later one.
   let latest = 0;
   let stopped = false;
@@ -301,11 +500,11 @@ function render({ el }) {
     const heartbeat = await fetchHeartbeat(url);
     if (stopped || mine !== latest) return;
     try {
-      show(root, heartbeat, Date.now());
+      chosen.show(root, heartbeat, Date.now());
     } catch (error) {
       // A document it cannot show: said so, not left at "Checking…".
-      show(root, null, Date.now());
-      console.error("forecast dashboard:", error);
+      chosen.show(root, null, Date.now());
+      console.error(`${name ?? "forecast"} card:`, error);
     }
   };
   refresh();
