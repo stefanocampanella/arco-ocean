@@ -40,14 +40,13 @@ The new version changes:
 Name: ARCO-OCEAN
 Description: |
   ARCO-OCEAN is an analysis-ready cloud-optimized dataset of the physical properties of the
-  ocean and sea ice, with the atmospheric and hydrological forcing that would drive a numerical
+  ocean and sea ice, with the atmospheric forcing that would drive a numerical
   simulation, designed for training machine learning models. Three products are given on
   regular latitude-longitude grids at 0.25, 0.5 and 1 degree, on 49 depth levels:
   the historical dataset, daily from 1 January 1993 to 30 June 2026, merged from retrospective
-  analyses (GLORYS12 for the ocean and sea ice, ERA5 for the atmosphere, GloFAS for river
-  discharge); its statistics (a daily climatology and the standard deviation of the anomalies
-  over 1993-2023); and daily forecast runs on the same grids and variables (GLO12, ECMWF IFS
-  open data and the GloFAS forecast; 10 lead days, the last five years of runs), updated every
+  analyses (GLORYS12 for the ocean and sea ice, ERA5 for the atmosphere); its statistics (a daily climatology and the standard deviation of the anomalies
+  over 1993-2023); and daily forecast runs on the same grids and variables (GLO12 and ECMWF IFS
+  open data; 10 lead days, the last five years of runs), updated every
   day. Each product is an Icechunk repository (Zarr version 3 with versions) per resolution:
   historical/res=<res>, statistics/res=<res> and forecast/res=<res>, res one of 0p25, 0p5, 1p0.
   Cells are conservatively averaged from the native grids, with the sea fraction, cell areas and
@@ -64,7 +63,6 @@ Tags:
   - climate
   - forecast
   - global
-  - hydrology
   - ice
   - machine learning
   - oceans

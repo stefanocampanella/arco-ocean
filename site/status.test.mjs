@@ -166,12 +166,11 @@ test("labels and durations", () => {
   assert.equal(utc(null), "–");
   assert.equal(resolutionLabel("0p25"), "0.25°");
   assert.equal(resolutionLabel("1p0"), "1.0°");
-  assert.equal(componentLabel("glofas_forecast"), "GloFAS");
   assert.equal(componentLabel("glo12_forecast"), "GLO12");
   assert.equal(componentLabel("ifs_forecast"), "IFS");
   assert.equal(
-    flagsSummary({ ifs_forecast: 1, glofas_forecast: 1, glo12_forecast: 0.4 }),
-    "IFS 100 %, GloFAS 100 %, GLO12 40 %",
+    flagsSummary({ ifs_forecast: 1, glo12_forecast: 0.4 }),
+    "IFS 100 %, GLO12 40 %",
   );
   assert.equal(flagsSummary({}), "–");
 });

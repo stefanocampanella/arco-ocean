@@ -1,7 +1,7 @@
 # The sources: versions, limitations and how they fit together
 
-ARCO-OCEAN merges products made independently: an ocean reanalysis, an atmospheric reanalysis
-and a hydrological reanalysis, and for the forecasts their operational counterparts. This page
+ARCO-OCEAN merges products made independently: an ocean reanalysis and an atmospheric
+reanalysis, and for the forecasts their operational counterparts. This page
 records which versions the recipes read, and what users should know about each source and about
 how they fit together. It does not report errors of the sources: it reports limitations their
 producers document. Checked on 23 Nov 2026 against the producers' documentation (links below).
@@ -15,9 +15,6 @@ Every source is read at its latest version.
 | GLORYS12 (`GLOBAL_MULTIYEAR_PHY_001_030`) | `cmems_mod_glo_phy_my_0.083deg_P1D-m` and `..._static`, version 202311 | 202311, the only version; no newer global physics reanalysis at 1/12° in the catalogue |
 | GLO12 (`GLOBAL_ANALYSISFORECAST_PHY_001_024`) | `cmems_mod_glo_phy_anfc_0.083deg_P1D-m` and the `-cur`, `-so`, `-thetao` datasets, version 202406; static fields version 202211 | the same, the only versions |
 | ERA5 | Google's ARCO-ERA5 store `full_37-1h-0p25deg-chunk-1.zarr-v3` | the newest of Google's ERA5 stores |
-| GloFAS historical | `cems-glofas-historical`, `version_5_0`, consolidated | `version_5_0` (the EWDS also offers `version_4_0`) |
-| GloFAS forecast | `cems-glofas-forecast`, `operational`, control member | `operational` (v4.x; v5.0 not operational yet) |
-| GloFAS drainage directions | `ldd_glofas_v4_0.nc` | v4.0, the latest GloFAS LDD (GloFAS v5.0 publishes none; its cells are v4.0's) |
 | IFS HRES | ECMWF open data, 0.25°, on AWS (`s3://ecmwf-forecasts`) | the current operational cycle |
 
 ## GLORYS12, the ocean and sea ice
@@ -73,19 +70,8 @@ From ERA5's documentation and its known issues ([ERA5: data documentation](https
 
 ## GloFAS, the river discharge
 
-From the [GloFAS v5.0](https://global-flood.emergency.copernicus.eu/news/252-the-new-copernicus-glofas-v50-hydrological-reanalysis-has-been-released/) documentation:
-
-- **Forcing.** The v5.0 reanalysis is driven by ERA5, with an amended precipitation from which
-  isolated high-intensity values (rain bombs) were removed. Its rivers are therefore fed by
-  nearly the same rain as ARCO-OCEAN's `tp`.
-- **Limitations stated by the producers.**
-  - LISFLOOD does not model horizontal groundwater fluxes. Where water for human use is drawn
-    from groundwater (arid regions above all), return flows can be spurious.
-  - Reservoirs are represented through a static index that ignores operating rules, filling
-    levels and reservoirs not in GloFAS.
-- **The forecasts are v4.x.** The operational forecast, read for the forecasts, is GloFAS v4.x
-  until v5.0 becomes operational. The forecasts' discharge comes from a different model version
-  than the historical dataset's.
+Not in version 2 (README, Rivers). The notes on GloFAS v5.0 and its forecasts are at the tag
+`rivers-last`.
 
 ## How the sources fit together
 
@@ -97,17 +83,11 @@ system:
    of 2018. Before 2019, the surface fluxes implied by ARCO-OCEAN's atmosphere are not those
    the ocean received. From 2019 they come from the same reanalysis, though GLORYS12 computes
    its fluxes with its own bulk formulae.
-2. **The ocean did not feel the dataset's rivers.** GLORYS12's runoff is a climatology, while
-   `dis24_outlets` is GloFAS's interannual discharge. Salinity near river mouths varies with
-   the climatological runoff, not with the discharge given beside it. Floods and droughts in
-   `dis24_outlets` have no counterpart in `so`.
-3. **Two sea surfaces.** ERA5's near-surface fields over the ocean (`2t`, `2d`, the winds) were
+2. **Two sea surfaces.** ERA5's near-surface fields over the ocean (`2t`, `2d`, the winds) were
    made over ERA5's own SST and sea ice, not GLORYS12's. They differ most near the ice edge and
    in the boundary currents.
-4. **Rain and rivers agree.** GloFAS v5.0's precipitation is ERA5's, except where rain bombs were
-   removed: `tp` and `dis24_outlets` are close to consistent.
-5. **The forecasts are other systems.** GLO12 (the operational analysis and forecast), IFS HRES
-   and the GloFAS v4.x forecast are not the reanalyses' systems. They differ in model version,
+3. **The forecasts are other systems.** GLO12 (the operational analysis and forecast) and IFS
+   HRES are not the reanalyses' systems. They differ in model version,
    resolution and assimilated data, and GLO12 has its own bathymetry and mask (README,
    Forecasts). A model trained on the historical dataset meets a shift when it reads the
    forecasts.
