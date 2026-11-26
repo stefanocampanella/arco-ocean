@@ -3,7 +3,8 @@
 # Chunks are planned by arco-make for each block (`arco-make download --plan` prints them).
 # The whole download takes a few days: the profile in [save] storage_options must allow that.
 time_dim = "time"
-# Dates come from the command (--start, --end; --extend appends to an output): see README.
+# Dates come from the command (--start, --end; --extend appends to an output): see
+# docs/producing.md.
 # 32-day blocks: about 25 s per day of data, memory levels off (arco-make logbook, 18 Nov).
 step = "32D"
 

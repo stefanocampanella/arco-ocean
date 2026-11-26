@@ -1,41 +1,56 @@
 # SPDX-FileCopyrightText: 2026 Stefano Campanella
 # SPDX-License-Identifier: MIT
-# The web page (site/) on GitHub Pages, deployed from main. Static files, no build: the logo is a
-# link to assets/, copied as a file. Pages must be enabled once, with "GitHub Actions" as source
-# (Settings, Pages).
+# The site (docs/, mystmd) on GitHub Pages, deployed from main; built, not deployed, on pull
+# requests, so that a page that does not build fails them. Pages must be enabled once, with
+# "GitHub Actions" as source (Settings, Pages).
 name: pages
 
 on:
   push:
     branches: [ main ]
-    paths: [ "site/**", "assets/**", ".github/workflows/pages.yml" ]
+    paths: [ "docs/**", ".github/workflows/pages.yml" ]
+  pull_request:
+    paths: [ "docs/**", ".github/workflows/pages.yml" ]
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  # The versions of the build, as the checks run Node.js (.pre-commit-config.yaml).
+  MYSTMD: mystmd==1.14.0
+  NODEJS: nodejs-wheel==24.19.0
+
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+      - name: Build the site
+        working-directory: docs
+        env:
+          # The site is served under /arco-ocean/ (a project's Pages).
+          BASE_URL: /${{ github.event.repository.name }}
+        run: uvx --from "${MYSTMD}" --with "${NODEJS}" myst build --html --strict --ci < /dev/null
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: docs/_build/html
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v6
-      - name: Collect the site
-        run: |
-          mkdir _site
-          cp -rL site/. _site/
-          rm _site/*.test.mjs
-      - uses: actions/configure-pages@v6
-      - uses: actions/upload-pages-artifact@v5
-        with:
-          path: _site
       - id: deployment
         uses: actions/deploy-pages@v5

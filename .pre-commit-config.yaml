@@ -38,9 +38,9 @@ repos:
         files: ^tutorials/.*\.py$
       - id: site-tests
         name: web page tests (node --test)
-        entry: uvx --from nodejs-wheel==24.19.0 node --test site/status.test.mjs
+        entry: uvx --from nodejs-wheel==24.19.0 node --test 'tests/js/*.test.js'
         language: system
-        files: ^site/.*\.(js|mjs)$
+        files: ^(docs/assets/js|tests/js)/
         pass_filenames: false
       # The scripts' tests (tests/bats; the libraries are submodules: git submodule update
       # --init). The heartbeat's need the project's environment (uv sync), else they are skipped.

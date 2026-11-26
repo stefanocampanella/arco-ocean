@@ -1,6 +1,7 @@
 version = 1
 
-# Files that cannot carry an SPDX header (documentation, data, images, lock and citation files).
+# Files that cannot carry an SPDX header (documentation, data, images, test fixtures, lock and
+# citation files).
 # Recipes, scripts, tests, workflows and notebooks carry their own.
 [[annotations]]
 path = [
@@ -11,15 +12,16 @@ path = [
   "pyproject.toml",
   ".gitignore",
   ".gitmodules",
+  "tests/js/fixtures/**",
 ]
 precedence = "closest"
 SPDX-FileCopyrightText = "2026 Stefano Campanella"
 SPDX-License-Identifier = "MIT"
 
 # The animation and its icon (scripts/animation.py) show the dataset's values: CC BY 4.0, as the
-# data, crediting the Copernicus Marine Service in the README.
+# data, crediting the Copernicus Marine Service where they are shown.
 [[annotations]]
-path = ["assets/arco-ocean.png", "assets/arco-ocean.webp"]
+path = ["docs/assets/images/arco-ocean.png", "docs/assets/images/arco-ocean.webp"]
 precedence = "override"
 SPDX-FileCopyrightText = "2026 Stefano Campanella"
 SPDX-License-Identifier = "CC-BY-4.0"

@@ -64,7 +64,7 @@ DESCRIPTION
 
     Examples:
         $0 --start 2026-07-01                 # the first time: backfill to today's run
-        $0                                    # every day, from systemd (see README)
+        $0                                    # every day, from systemd (docs/forecasts.md)
         $0 --status-url s3://BUCKET/status/forecast.json   # with the web page's heartbeat
         $0 --data-root s3://BUCKET            # the repositories at s3://BUCKET/forecast/res=<res>
 EOF

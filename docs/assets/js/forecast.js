@@ -1,8 +1,13 @@
 // SPDX-FileCopyrightText: 2026 Stefano Campanella
 // SPDX-License-Identifier: MIT
 //
-// The state of the forecast collection, from its heartbeat (`arco-ocean status` writes it;
-// `arco-ocean heartbeat-schema` prints the document's schema). Pure functions, tested by status.test.mjs.
+// The forecast collection on the web page: its state, judged from its heartbeat (`arco-ocean
+// status` writes it; `arco-ocean heartbeat-schema` prints the document's schema), and the
+// dashboard that shows it, a MyST `{anywidget}` (docs/index.md). One module: the directive copies
+// this file alone, so it imports nothing. The judgement is pure functions, tested by
+// tests/js/forecast.test.js; the widget reads the heartbeat every minute. The widget's JSON gives
+// `status_url`; `?status=URL` in the page's address reads another heartbeat (a test copy, say).
+// Nothing here runs on import: Node's tests import it without a page.
 
 export const DEFAULT_STATUS_URL =
   "https://ogs-arco-ocean.s3.eu-south-1.amazonaws.com/status/forecast.json";
@@ -194,3 +199,105 @@ export function runAgeDays(latestRun, now = Date.now()) {
   const today = day(new Date(now).toISOString().slice(0, 10));
   return Math.round((today - run) / DAY);
 }
+
+// --- The dashboard -------------------------------------------------------------------------------
+
+const REFRESH_MS = 60 * 1000;
+const ICONS = { downloading: "⟳", finished: "✓", stale: "!", aborted: "✕", unknown: "?" };
+
+const MARKUP = `
+  <div class="status-card" data-status="unknown" aria-live="polite">
+    <div class="status-head">
+      <span class="status-icon" aria-hidden="true">?</span>
+      <span class="status-label">Checking…</span>
+    </div>
+    <p class="status-detail">Reading the heartbeat.</p>
+    <dl class="status-times">
+      <div><dt>Newest run asked for</dt><dd data-field="target">–</dd></div>
+      <div><dt>Started</dt><dd data-field="started">–</dd></div>
+      <div><dt>Last heartbeat</dt><dd data-field="beat">–</dd></div>
+      <div><dt>Ended</dt><dd data-field="ended">–</dd></div>
+    </dl>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <caption>Each resolution's repository</caption>
+      <thead>
+        <tr><th scope="col">Resolution</th><th scope="col">This collection</th><th scope="col">Newest run stored</th><th scope="col">Runs stored</th><th scope="col">Own forecast in the newest run</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <p class="note">Checked at <span data-field="checked">–</span>; checked again every minute.</p>
+`;
+
+async function fetchHeartbeat(url) {
+  try {
+    const answer = await fetch(url, { cache: "no-store" });
+    if (!answer.ok) return null;
+    return await answer.json();
+  } catch {
+    return null;
+  }
+}
+
+function cell(row, text) {
+  const td = document.createElement("td");
+  td.textContent = text;
+  row.append(td);
+  return td;
+}
+
+// Show the heartbeat in the widget's element, as judged at `now`.
+export function show(el, heartbeat, now) {
+  const verdict = assess(heartbeat, now);
+  const field = (name) => el.querySelector(`[data-field="${name}"]`);
+  el.querySelector(".status-card").dataset.status = verdict.status;
+  el.querySelector(".status-icon").textContent = ICONS[verdict.status];
+  el.querySelector(".status-label").textContent = verdict.label;
+  el.querySelector(".status-detail").textContent = verdict.detail;
+
+  const ok = heartbeat && heartbeat.schema === 1;
+  const updated = ok ? Date.parse(heartbeat.updated_at) : NaN;
+  field("started").textContent = ok ? utc(heartbeat.started_at) : "–";
+  field("beat").textContent = Number.isNaN(updated)
+    ? "–"
+    : `${utc(heartbeat.updated_at)} (${duration(now - updated)} ago)`;
+  field("ended").textContent = ok && heartbeat.ended_at ? utc(heartbeat.ended_at) : "–";
+  field("target").textContent = ok ? heartbeat.target_run : "–";
+
+  const body = el.querySelector("tbody");
+  body.replaceChildren();
+  for (const entry of ok ? (heartbeat.resolutions ?? []) : []) {
+    const row = document.createElement("tr");
+    cell(row, resolutionLabel(entry.res));
+    cell(row, resolutionState(entry.state)).dataset.state = entry.state;
+    const age = runAgeDays(entry.latest_run, now);
+    const ageText = age === null ? "" : age === 0 ? " (today)" : ` (${age} d ago)`;
+    cell(row, entry.latest_run ? `${entry.latest_run}${ageText}` : "–");
+    cell(row, entry.runs ?? "–");
+    cell(row, entry.error ?? flagsSummary(entry.flags));
+    body.append(row);
+  }
+  field("checked").textContent = utc(new Date(now).toISOString());
+}
+
+// The heartbeat's URL: the page's ?status=, else the widget's, else the bucket's.
+export function statusUrl(search, given) {
+  return new URLSearchParams(search).get("status") || given || DEFAULT_STATUS_URL;
+}
+
+function render({ model, el }) {
+  // Appended, not el.innerHTML: the page's renderer puts the widget's stylesheet in el.
+  const root = document.createElement("div");
+  root.innerHTML = MARKUP;
+  el.append(root);
+  const url = statusUrl(window.location.search, model.get("status_url"));
+  const refresh = async () => show(root, await fetchHeartbeat(url), Date.now());
+  refresh();
+  const timer = setInterval(refresh, REFRESH_MS);
+  // Called when the widget leaves the page.
+  return () => clearInterval(timer);
+}
+
+export default { render };

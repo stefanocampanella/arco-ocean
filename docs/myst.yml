@@ -1,0 +1,34 @@
+# SPDX-FileCopyrightText: 2026 Stefano Campanella
+# SPDX-License-Identifier: MIT
+# The ARCO-OCEAN site (mystmd, the engine of Jupyter Book 2): `myst start` previews it, `myst build
+# --html` writes it to _build/html (README, Development). The pages are this folder's.
+version: 1
+project:
+  title: ARCO-OCEAN
+  description: Analysis-ready, cloud-optimized ocean and sea ice with their atmospheric forcing, for machine learning.
+  github: https://github.com/stefanocampanella/arco-ocean
+  license:
+    content: CC-BY-4.0
+    code: MIT
+  doi: 10.5281/zenodo.17751608
+  exclude:
+    # Not pages of the site: the AWS Open Data Registry's entry, and the animation's design
+    # (scripts/animation.py).
+    - aws-open-data-registry.md
+    - animation-design.md
+    - _build/**
+  toc:
+    - file: index.md
+    - file: data.md
+    - file: access.md
+    - file: sources.md
+    - file: coarsen-ocean-datasets.md
+    - file: producing.md
+    - file: forecasts.md
+    - file: licence.md
+    - file: development.md
+site:
+  template: book-theme
+  options:
+    logo_text: ARCO-OCEAN
+    favicon: assets/images/arco-ocean.png

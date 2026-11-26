@@ -3,7 +3,7 @@
 Roadmap item 5: an animation for the Earthmover marketplace listing and the documentation. This
 was a proposal; the maintainer chose its content and text on 23 Nov (Decisions, below).
 
-<img src="../assets/arco-ocean.webp" width="480" alt="A globe turning through 2023: sea surface temperature and sea ice from ARCO-OCEAN">
+<img src="assets/images/arco-ocean.webp" width="480" alt="A globe turning through 2023: sea surface temperature and sea ice from ARCO-OCEAN">
 
 *The animation, made on 25 Nov by [scripts/animation.py](../scripts/animation.py) (How it is
 made, below). Generated using E.U. Copernicus Marine Service Information
@@ -72,10 +72,10 @@ in its help). Made on 25 Nov 2026:
   antimeridian, where the grid's longitudes wrap, showed as a line. The frames take 5 minutes
   on the project machine, the whole script 11 (the WebP's encoding is the slowest part).
 - **Outputs.**
-  - `assets/arco-ocean.webp` (480 x 480, 8.3 MB, quality 60: WebP shares little between
+  - `docs/assets/images/arco-ocean.webp` (480 x 480, 8.3 MB, quality 60: WebP shares little between
     frames, so its size follows their number): the README's cover, and the web page's,
     loaded when scrolled to (the still globe for readers who ask for less motion).
-  - `assets/arco-ocean.png`: the first frame's globe, the web page's icon.
+  - `docs/assets/images/arco-ocean.png`: the first frame's globe, the web page's icon.
   - An MP4 (H.264) and a WebM (VP9), 1080 x 1080, 7.9 and 5.6 MB, for the marketplace: not
     committed.
   - Each credits the Copernicus Marine Service where it is shown; the images are CC BY 4.0, as

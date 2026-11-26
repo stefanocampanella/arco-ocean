@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Stefano Campanella
 // SPDX-License-Identifier: MIT
 //
-// node --test site/
+// The web page's judgement of the heartbeat (docs/assets/js/forecast.js): node --test tests/js/*.test.js
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -15,28 +15,15 @@ import {
   resolutionLabel,
   runAgeDays,
   utc,
-} from "./status.js";
+} from "../../docs/assets/js/forecast.js";
+// A heartbeat as `arco-ocean status` publishes it (tests/python/test_js_fixtures.py checks it
+// against the package's models): a collection running at 12:28 on 24 Nov 2026.
+import running from "./fixtures/heartbeat.json" with { type: "json" };
 
 const NOW = Date.parse("2026-11-24T12:30:00Z");
 
 function heartbeat(fields) {
-  return {
-    schema: 1,
-    state: "running",
-    detail: null,
-    started_at: "2026-11-24T12:00:00Z",
-    updated_at: "2026-11-24T12:28:00Z",
-    ended_at: null,
-    heartbeat_seconds: 300,
-    stale_after_hours: 30,
-    target_run: "2026-11-24",
-    resolutions: [
-      { res: "0p25", state: "finished", latest_run: "2026-11-24", runs: 147, flags: {} },
-      { res: "0p5", state: "downloading", latest_run: "2026-11-23", runs: 146, flags: {} },
-      { res: "1p0", state: "pending", latest_run: "2026-11-23", runs: 146, flags: {} },
-    ],
-    ...fields,
-  };
+  return { ...structuredClone(running), ...fields };
 }
 
 test("a running collection with a recent heartbeat is downloading", () => {
