@@ -12,10 +12,8 @@ project:
   license: MIT
   doi: 10.5281/zenodo.17751608
   exclude:
-    # Not pages of the site: the AWS Open Data Registry's entry, and the animation's design
-    # (scripts/animation.py).
+    # Not a page of the site: the AWS Open Data Registry's entry.
     - aws-open-data-registry.md
-    - animation-design.md
     - _build/**
   toc:
     - file: index.md

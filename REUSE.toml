@@ -18,7 +18,7 @@ precedence = "closest"
 SPDX-FileCopyrightText = "2026 Stefano Campanella"
 SPDX-License-Identifier = "MIT"
 
-# The animation and its icon (scripts/animation.py) show the dataset's values: CC BY 4.0, as the
+# The animation and its icon (notebooks/animation.py) show the dataset's values: CC BY 4.0, as the
 # data, crediting the Copernicus Marine Service where they are shown.
 [[annotations]]
 path = ["docs/assets/images/arco-ocean.png", "docs/assets/images/arco-ocean.webp"]
