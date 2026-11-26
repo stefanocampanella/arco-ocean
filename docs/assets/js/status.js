@@ -7,12 +7,15 @@
 //   status` writes it; `arco-ocean heartbeat-schema` prints the document's schema);
 // - {"show": "historical"}: the historical downloads, each resolution's run once, judged from
 //   their progresses (`arco-ocean progress`, through scripts/download.sh --status-url; `arco-ocean
-//   progress-schema`), one document per resolution.
+//   progress-schema`), one document per resolution;
+// - {"show": "statistics"}: the statistics (climatology, anomaly standard deviation), each
+//   resolution's computed once, judged from the same documents (`arco-ocean progress --kind
+//   statistics`, through scripts/climatology.sh --status-url): a state, no progress.
 // One module: the directive copies this file alone, so it imports nothing. The judgements are
 // pure functions, tested by tests/js/*.test.js; the widget reads its document every minute.
-// `?status=URL` (the forecast's heartbeat) and `?progress=PREFIX` (where the historical
-// progresses are: PREFIX + "res=<res>.json") in the page's address read other documents (a test
-// copy, say). Nothing here runs on import: Node's tests import it without
+// `?status=URL` (the forecast's heartbeat), `?progress=PREFIX` (where the historical progresses
+// are: PREFIX + "res=<res>.json") and `?statistics=PREFIX` (the statistics') in the page's address
+// read other documents (a test copy, say). Nothing here runs on import: Node's tests import it without
 // a page.
 
 export const DEFAULT_STATUS_URL =
@@ -21,6 +24,8 @@ export const DEFAULT_STATUS_URL =
 // bucket's layout (scripts/download.sh --status-url s3://ogs-arco-ocean/status/historical/res=0p25.json).
 export const DEFAULT_PROGRESS_PREFIX =
   "https://ogs-arco-ocean.s3.eu-south-1.amazonaws.com/status/historical/";
+export const DEFAULT_STATISTICS_PREFIX =
+  "https://ogs-arco-ocean.s3.eu-south-1.amazonaws.com/status/statistics/";
 export const HISTORICAL_RESOLUTIONS = ["0p25", "0p5", "1p0"];
 
 const MINUTE = 60 * 1000;
@@ -266,6 +271,7 @@ export function assessProgress(progress, now = Date.now()) {
       detail: `The progress has an unknown format (schema ${progress.schema}).`,
     };
   }
+  if (progress.kind === "statistics") return assessStatistics(progress, now);
   const done = doneText(progress);
   const unread = progress.error ? ` (${progress.error}: the next update tries again)` : "";
   if (progress.state === "running") {
@@ -311,14 +317,73 @@ export function assessProgress(progress, now = Date.now()) {
   };
 }
 
+// The statistics' state (`assessProgress` of a document of kind "statistics"): computed in one
+// commit, they have a state and times, no progress.
+function assessStatistics(statistics, now) {
+  if (statistics.state === "running") {
+    const silence = now - Date.parse(statistics.updated_at);
+    const beat = (Number(statistics.heartbeat_seconds) || 300) * 1000;
+    if (!(silence <= Math.max(MISSED_BEATS * beat, MIN_SILENCE))) {
+      return {
+        status: "stale",
+        label: "Stale",
+        detail:
+          `No update for ${duration(silence)}: the computation stopped without reporting (the ` +
+          "machine down or the process killed). Rerun it.",
+      };
+    }
+    return {
+      status: "downloading",
+      label: "Computing",
+      detail: `Computing, for ${duration(now - Date.parse(statistics.started_at))}.`,
+    };
+  }
+  if (statistics.state === "finished") {
+    return {
+      status: "finished",
+      label: "Finished",
+      detail:
+        statistics.detail ??
+        `Stored at ${utc(statistics.last_commit_at ?? statistics.ended_at)}.`,
+    };
+  }
+  if (statistics.state === "failed") {
+    return {
+      status: "aborted",
+      label: "Failed",
+      detail: statistics.detail ?? "The computation failed: rerun it.",
+    };
+  }
+  return {
+    status: "unknown",
+    label: "Unknown",
+    detail: `The state has an unknown value (${statistics.state}).`,
+  };
+}
+
 // The headline's state among the resolutions: the most worrying first.
 const SEVERITY = ["aborted", "stale", "unknown", "downloading", "finished"];
 
-// The historical downloads' state as the card's headline shows it, from each resolution's
-// progress (`entries`: {res, progress}, progress null where none could be read: not started,
-// or the bucket out of reach): the most worrying resolution's verdict, named, and the resolutions
-// not started; finished when every one published is.
-export function assessDownloads(entries, now = Date.now()) {
+// What the headlines say of the historical downloads and of the statistics when none has
+// published, or every one published is finished.
+const HEADLINES = {
+  historical: {
+    none: "No historical download has published its progress yet",
+    finished: "every day stored",
+  },
+  statistics: {
+    none: "No computation of statistics has published its state yet",
+    finished: "stored",
+  },
+};
+
+// The state of the historical downloads (`card` "historical") or of the statistics
+// ("statistics") as the card's headline shows it, from each resolution's document (`entries`:
+// {res, progress}, progress null where none could be read: not started, or the bucket out of
+// reach): the most worrying resolution's verdict, named, and the resolutions not started; finished
+// when every one published is.
+export function assessRuns(entries, now = Date.now(), card = "historical") {
+  const words = HEADLINES[card];
   const judged = (entries ?? [])
     .filter((entry) => entry.progress)
     .map((entry) => ({ res: entry.res, verdict: assessProgress(entry.progress, now) }));
@@ -327,9 +392,7 @@ export function assessDownloads(entries, now = Date.now()) {
     return {
       status: "unknown",
       label: "Unknown",
-      detail:
-        "No historical download has published its progress yet, or the bucket cannot be " +
-        "reached.",
+      detail: `${words.none}, or the bucket cannot be reached.`,
     };
   }
   const rank = (entry) => SEVERITY.indexOf(entry.verdict.status);
@@ -342,7 +405,7 @@ export function assessDownloads(entries, now = Date.now()) {
     return {
       status: "finished",
       label: "Finished",
-      detail: `${names}: every day stored.${notStarted}`,
+      detail: `${names}: ${words.finished}.${notStarted}`,
     };
   }
   return {
@@ -395,6 +458,26 @@ const PROGRESS_MARKUP = `
       <caption>Each resolution's download</caption>
       <thead>
         <tr><th scope="col">Resolution</th><th scope="col">State</th><th scope="col">Period</th><th scope="col">Last day stored</th><th scope="col">Last block committed</th><th scope="col">Last update</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <p class="note">Checked at <span data-field="checked">–</span>; checked again every minute.</p>
+`;
+
+const STATISTICS_MARKUP = `
+  <div class="status-card" data-status="unknown" aria-live="polite">
+    <div class="status-head">
+      <span class="status-icon" aria-hidden="true">?</span>
+      <span class="status-label">Checking…</span>
+    </div>
+    <p class="status-detail">Reading the state.</p>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <caption>Each resolution's statistics</caption>
+      <thead>
+        <tr><th scope="col">Resolution</th><th scope="col">State</th><th scope="col">Started</th><th scope="col">Last update</th><th scope="col">Stored</th></tr>
       </thead>
       <tbody></tbody>
     </table>
@@ -483,15 +566,29 @@ function noProgress() {
   return HISTORICAL_RESOLUTIONS.map((res) => ({ res, progress: null }));
 }
 
-// Show the historical downloads' progresses (`entries`: {res, progress}) in the widget's
-// element, as judged at `now`.
-export function showProgress(el, entries, now) {
-  const all = entries ?? noProgress();
-  const verdict = assessDownloads(all, now);
+// The card's headline, as judged.
+function showHeadline(el, verdict) {
   el.querySelector(".status-card").dataset.status = verdict.status;
   el.querySelector(".status-icon").textContent = ICONS[verdict.status];
   el.querySelector(".status-label").textContent = verdict.label;
   el.querySelector(".status-detail").textContent = verdict.detail;
+}
+
+// A row's state cell: "Not started" without a document.
+function stateCell(row, progress, now) {
+  if (!progress) {
+    cell(row, "Not started").dataset.state = "pending";
+    return;
+  }
+  const own = assessProgress(progress, now);
+  cell(row, own.label).dataset.state = own.status;
+}
+
+// Show the historical downloads' progresses (`entries`: {res, progress}) in the widget's
+// element, as judged at `now`.
+export function showProgress(el, entries, now) {
+  const all = entries ?? noProgress();
+  showHeadline(el, assessRuns(all, now, "historical"));
 
   const body = el.querySelector("tbody");
   body.replaceChildren();
@@ -499,12 +596,7 @@ export function showProgress(el, entries, now) {
     const row = document.createElement("tr");
     cell(row, resolutionLabel(res));
     const ok = progress && progress.schema === 1;
-    if (!progress) {
-      cell(row, "Not started").dataset.state = "pending";
-    } else {
-      const own = assessProgress(progress, now);
-      cell(row, own.label).dataset.state = own.status;
-    }
+    stateCell(row, progress, now);
     dateCell(row, ok ? period(progress) : "–");
     const share = ok ? fraction(progress) : null;
     const stored = dateCell(
@@ -529,15 +621,50 @@ export function showProgress(el, entries, now) {
   el.querySelector('[data-field="checked"]').textContent = utc(new Date(now).toISOString());
 }
 
+// Show the statistics' states (`entries`: {res, progress}) in the widget's element, as judged at
+// `now`.
+export function showStatistics(el, entries, now) {
+  const all = entries ?? noProgress();
+  showHeadline(el, assessRuns(all, now, "statistics"));
+  const body = el.querySelector("tbody");
+  body.replaceChildren();
+  for (const { res, progress } of all) {
+    const row = document.createElement("tr");
+    cell(row, resolutionLabel(res));
+    const ok = progress && progress.schema === 1;
+    stateCell(row, progress, now);
+    dateCell(row, ok ? utc(progress.started_at) : "–");
+    dateCell(row, ok ? ago(progress.updated_at, now) : "–");
+    dateCell(row, ok && progress.last_commit_at ? utc(progress.last_commit_at) : "–");
+    body.append(row);
+  }
+  el.querySelector('[data-field="checked"]').textContent = utc(new Date(now).toISOString());
+}
+
 // The heartbeat's URL: the page's ?status=, else the bucket's (written once, here).
 export function statusUrl(search) {
   return new URLSearchParams(search).get("status") || DEFAULT_STATUS_URL;
 }
 
-// The progresses' URLs, one per resolution: the page's ?progress= prefix, else the bucket's.
-export function progressUrls(search) {
-  const prefix = new URLSearchParams(search).get("progress") || DEFAULT_PROGRESS_PREFIX;
+// The documents' URLs, one per resolution: the page's ?KEY= prefix, else `fallback`.
+function documentUrls(search, key, fallback) {
+  const prefix = new URLSearchParams(search).get(key) || fallback;
   return HISTORICAL_RESOLUTIONS.map((res) => ({ res, url: `${prefix}res=${res}.json` }));
+}
+
+// The progresses' URLs: the page's ?progress= prefix, else the bucket's.
+export function progressUrls(search) {
+  return documentUrls(search, "progress", DEFAULT_PROGRESS_PREFIX);
+}
+
+// The statistics' URLs: the page's ?statistics= prefix, else the bucket's.
+export function statisticsUrls(search) {
+  return documentUrls(search, "statistics", DEFAULT_STATISTICS_PREFIX);
+}
+
+// Each resolution's document, read from `urls` (null where it cannot be).
+function loadAll(urls) {
+  return Promise.all(urls.map(async ({ res, url }) => ({ res, progress: await fetchDocument(url) })));
 }
 
 // The cards, by the directive's "show": what each reads (`load`, from the page's address) and
@@ -550,14 +677,13 @@ export const CARDS = {
   },
   historical: {
     markup: PROGRESS_MARKUP,
-    load: (search) =>
-      Promise.all(
-        progressUrls(search).map(async ({ res, url }) => ({
-          res,
-          progress: await fetchDocument(url),
-        })),
-      ),
+    load: (search) => loadAll(progressUrls(search)),
     show: showProgress,
+  },
+  statistics: {
+    markup: STATISTICS_MARKUP,
+    load: (search) => loadAll(statisticsUrls(search)),
+    show: showStatistics,
   },
 };
 
@@ -572,7 +698,7 @@ function render({ model, el }) {
   const name = model?.get?.("show");
   const chosen = card(name);
   if (chosen === null) {
-    el.textContent = `Unknown card "${name}": give "forecast" or "historical".`;
+    el.textContent = `Unknown card "${name}": give "forecast", "historical" or "statistics".`;
     return () => el.replaceChildren();
   }
   // Appended, not el.innerHTML: the page's renderer puts the widget's stylesheet in el.

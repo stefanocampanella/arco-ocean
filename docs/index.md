@@ -59,6 +59,20 @@ States: **downloading** (updated recently), **finished**, **failed** (the downlo
 is resumed by hand), **stale** (no update for more than 15 minutes, without an end: the machine
 down or the process killed).
 
+## Statistics
+
+The climatology and the anomaly standard deviation are computed once at each resolution, from
+the historical dataset, and written in one commit at the end: they have a state (computing,
+finished, failed), not a progress.
+
+:::{anywidget} assets/js/status.js
+:css: assets/js/status.css
+{"show": "statistics"}
+:::
+
+States: **computing** (updated recently), **finished**, **failed** (the computation stopped; it
+is rerun by hand), **stale** (no update for more than 15 minutes, without an end).
+
 ## Forecast collection
 
 A collection every day adds the day's forecast run to the forecast repositories, at every

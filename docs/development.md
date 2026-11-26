@@ -38,14 +38,15 @@ written once, here; the README points to these pages. To preview it:
 scripts/site.sh start   # http://localhost:3000
 ```
 
-The states of the historical downloads and of the forecast collection on the home page are
-MyST `{anywidget}`s of one module, `docs/assets/js/status.js` with its styles in `status.css`
-(the directive copies one file alone), the card chosen by the directive's JSON (`{"show":
-"historical"}` or `{"show": "forecast"}`). It holds the judgements of the documents (pure
-functions, tested in Node, `tests/js`, on fixtures the package's models validate) and the widget,
-which reads its document every minute. `?status=URL` in the page's address reads another
-heartbeat, e.g. the test copy in the bucket's `experiments/status/forecast.json`, and
-`?progress=PREFIX` other progresses (`PREFIX` followed by `res=<res>.json`).
+The states of the historical downloads, of the statistics and of the forecast collection on the
+home page are MyST `{anywidget}`s of one module, `docs/assets/js/status.js` with its styles in
+`status.css` (the directive copies one file alone), the card chosen by the directive's JSON
+(`{"show": "historical"}`, `{"show": "statistics"}` or `{"show": "forecast"}`). It holds the
+judgements of the documents (pure functions, tested in Node, `tests/js`, on fixtures the
+package's models validate) and the widget, which reads its documents every minute. `?status=URL`
+in the page's address reads another heartbeat, e.g. the test copy in the bucket's
+`experiments/status/forecast.json`, and `?progress=PREFIX` and `?statistics=PREFIX` other
+progresses and states (`PREFIX` followed by `res=<res>.json`).
 
 ## Use of AI tools
 

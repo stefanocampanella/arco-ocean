@@ -10,7 +10,7 @@ import { test } from "node:test";
 import {
   CARDS,
   DEFAULT_PROGRESS_PREFIX,
-  assessDownloads,
+  assessRuns,
   assessProgress,
   card,
   dayBefore,
@@ -136,14 +136,14 @@ function entries(byRes) {
 }
 
 test("the headline: none published is unknown", () => {
-  const verdict = assessDownloads(entries({}), NOW);
+  const verdict = assessRuns(entries({}), NOW);
   assert.equal(verdict.status, "unknown");
   assert.match(verdict.detail, /No historical download has published its progress yet/);
-  assert.equal(assessDownloads(null, NOW).status, "unknown");
+  assert.equal(assessRuns(null, NOW).status, "unknown");
 });
 
 test("the headline: one downloading, named, and those not started", () => {
-  const verdict = assessDownloads(entries({ "0p25": progress({}) }), NOW);
+  const verdict = assessRuns(entries({ "0p25": progress({}) }), NOW);
   assert.equal(verdict.status, "downloading");
   assert.equal(
     verdict.detail,
@@ -155,19 +155,19 @@ test("the headline: the most worrying resolution", () => {
   const finished = progress({ state: "finished", done_until: "2026-07-01" });
   const stale = progress({ updated_at: "2026-11-24T11:00:00Z" });
   const failed = progress({ state: "failed", detail: "Stopped." });
-  let verdict = assessDownloads(entries({ "0p25": finished, "0p5": stale, "1p0": progress({}) }), NOW);
+  let verdict = assessRuns(entries({ "0p25": finished, "0p5": stale, "1p0": progress({}) }), NOW);
   assert.equal(verdict.status, "stale");
   assert.match(verdict.detail, /^0\.5°: No update for 1 h 30 min/);
-  verdict = assessDownloads(entries({ "0p25": stale, "0p5": failed, "1p0": finished }), NOW);
+  verdict = assessRuns(entries({ "0p25": stale, "0p5": failed, "1p0": finished }), NOW);
   assert.equal(verdict.status, "aborted");
   assert.match(verdict.detail, /^0\.5°: Stopped\. Stored up to 1997-03-13/);
 });
 
 test("the headline: finished when every one published is", () => {
   const finished = progress({ state: "finished", done_until: "2026-07-01" });
-  let verdict = assessDownloads(entries({ "0p25": finished, "0p5": finished, "1p0": finished }), NOW);
+  let verdict = assessRuns(entries({ "0p25": finished, "0p5": finished, "1p0": finished }), NOW);
   assert.equal(verdict.status, "finished");
   assert.equal(verdict.detail, "0.25°, 0.5°, 1.0°: every day stored.");
-  verdict = assessDownloads(entries({ "0p25": finished }), NOW);
+  verdict = assessRuns(entries({ "0p25": finished }), NOW);
   assert.equal(verdict.detail, "0.25°: every day stored. Not started: 0.5°, 1.0°.");
 });
