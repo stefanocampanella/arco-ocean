@@ -12,6 +12,7 @@ __generated_with = "0.25.2"
 app = marimo.App(width="medium")
 
 with app.setup:
+    import datetime
     import json
     import pathlib
     import sys
@@ -69,6 +70,9 @@ def _():
 def _():
     # The examples on the real sources (Copernicus Marine credentials): `-- --live`.
     LIVE = "live" in mo.cli_args()
+    if LIVE:
+        # Copernicus Marine credentials from ~/.arcomakerc too, as arco-make reads them.
+        settings.load()
     return (LIVE,)
 
 
@@ -124,7 +128,7 @@ def _():
 
 
 @app.cell
-def _():
+def _(LIVE):
     mo.stop(not LIVE, mo.md("_On the real sources: run with `-- --live`, with Copernicus Marine credentials._"))
     box = {"latitude": slice(-12, 12), "longitude": slice(95, 135)}  # Maritime Continent
     st = (
@@ -138,7 +142,7 @@ def _():
     assert not (mask & ~_rule).any()
     _k = np.arange(mask.shape[0])[:, None, None]
     assert (mask == (_k < np.nan_to_num(st.deptho_lev.values)[None])).all()
-    return
+    return box, mask
 
 
 @app.cell(hide_code=True)
@@ -153,7 +157,7 @@ def _():
 
 
 @app.cell
-def _():
+def _(LIVE, box, mask):
     mo.stop(not LIVE, mo.md("_On the real sources: run with `-- --live`, with Copernicus Marine credentials._"))
     _day = xr.open_dataset(
       DAILY,
@@ -166,6 +170,8 @@ def _():
     assert int(mask[49].sum()) > 0 and int(_t.isel(depth=49).notnull().sum()) == 0
     # No value outside the mask.
     assert int((_t.notnull().values & ~mask).sum()) == 0
+    # A run with --live tells that its examples ran (tests/python/test_notebooks.py).
+    print("live examples: checked")
     return
 
 
@@ -205,7 +211,7 @@ def _():
     assert np.allclose(fraction, [0.5, 0.25, 0.25, 0.25])
     assert float((fraction * h).sum()) == 12.5
     {"water": water, "flat column": np.clip(mean_depth - top, 0, h) / h, "fraction": fraction}
-    return
+    return centres, faces, fraction, mean_depth, top
 
 
 @app.cell(hide_code=True)
@@ -238,7 +244,7 @@ def _():
 
 
 @app.cell
-def _():
+def _(centres, fraction, mean_depth):
     # current: the mean depth below the layer's centre
     assert (mean_depth > centres).tolist() == [True, False, False, False]
     # majority: at least half of the layer is sea
@@ -272,7 +278,7 @@ def _():
 def _():
     _ds = xr.Dataset({"seafrac": ("depth", np.array([0.5, 0.25, 1e-8, 0.0]))})
     _out = pu.fraction_mask(_ds, fraction="seafrac", mask_name="sea")
-    assert np.allclose(_out.seafrac.values, [0.5, 0.25, 0.0, 0.0])
+    assert _out.seafrac.values.tolist() == [0.5, 0.25, 0.0, 0.0]
     assert _out.sea.values.tolist() == [True, True, False, False]
     _majority = pu.fraction_mask(_ds, fraction="seafrac", mask_name="sea", threshold=0.5, inclusive=True)
     assert _majority.sea.values.tolist() == [True, False, False, False]
@@ -301,7 +307,7 @@ def _():
 
 
 @app.cell
-def _():
+def _(centres, faces, top):
     _rng = np.random.default_rng(0)
     _fine = _rng.choice([0.0, 3.0, 12.0, 27.0, 45.0], size=(1000, 4))  # 1000 coarse cells
     for _threshold in (0.0, 0.25, 0.5, 0.75, 1.0):
@@ -424,7 +430,7 @@ def _():
 
     ## 11. River discharge into the ocean
 
-    Not published in version 2 ([Data, Rivers](data.md)): this is the method of version 2.1.
+    Not published in version 2 ([Data, Rivers](../data.md)): this is the method of version 2.1.
 
     GloFAS gives the daily discharge (m³/s) of every land cell of its 0.05° grid. Discharge is not
     additive across cells (a river's cell already holds its tributaries): averaging the cells of a
@@ -635,7 +641,9 @@ def _():
 def _():
     _args = mo.cli_args()
     mo.stop("measure" not in _args)
-    _sections = str(_args.get("sections", "glorys,data,fill,ice,rivers,waverys")).split(",")
+    if not _args.get("measure") or not _args.get("out"):
+        raise SystemExit("--measure RES needs --out FILE.json")
+    _sections = listed(_args.get("sections") or "glorys,data,fill,ice,rivers,waverys")
     measure(float(_args["measure"]), _sections, pathlib.Path(str(_args["out"])))
     return
 
@@ -644,8 +652,19 @@ def _():
 def _():
     _args = mo.cli_args()
     mo.stop("tables" not in _args)
-    tables([json.loads(pathlib.Path(p).read_text()) for p in str(_args["tables"]).split(",")])
+    _files = listed(_args.get("tables") or "")
+    if not _files:
+        raise SystemExit("--tables needs FILES (JSON, from --measure)")
+    tables([json.loads(pathlib.Path(p).read_text()) for p in _files])
     return
+
+
+@app.function
+def listed(value: object) -> list[str]:
+    """An option's values: comma- or space-separated, or the option repeated (marimo's
+    cli_args gives a list then)."""
+    items = value if isinstance(value, list) else [value]
+    return " ".join(str(item) for item in items).replace(",", " ").split()
 
 
 @app.function
@@ -701,7 +720,8 @@ class Static:
     self.centres = self.bathy.depth.values.astype("float64")
     self.faces = np.concatenate([[0.0], np.cumsum(self.e3t)])
     self.mask = self.bathy["mask"].values.astype(bool)
-    self.deptho = np.nan_to_num(self.bathy.deptho.values.astype("float64"))  # land: 0
+    # Land: 0.
+    self.deptho = np.nan_to_num(self.bathy.deptho.values.astype("float64"))
 
 
 @app.function
