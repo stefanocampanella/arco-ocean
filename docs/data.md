@@ -1,7 +1,3 @@
----
-license: CC-BY-4.0
----
-
 # Data
 
 ARCO-OCEAN is an analysis-ready cloud-optimized ([Abernathey et al., 2021](https://doi.org/10.1109/MCSE.2021.3059437)) dataset providing physical properties of the ocean and sea ice for a period of about 33 years, from the 1st of January 1993 to the 30th of June 2026, the last day every source gives as final data (November 2026). The dataset includes also atmospheric variables that would be needed as boundary conditions and used to drive a numerical simulation. The dataset is the result of collecting, processing, merging and optimizing for the cloud different data sources, all retrospective analyses (reanalyses) or hindcasts of different Earth system components.
@@ -104,7 +100,7 @@ The [notes on coarsening ocean datasets](coarsen-ocean-datasets.md) explain thes
 
 Every block of the download is checked before it is written: a complete daily time axis, the grid convention, ocean and sea ice values exactly where `seafrac > 0` and every other variable everywhere, and a `long_name` and `units` on every variable, no two variables sharing a `long_name`. `configs/validate/historical.toml` checks a whole dataset the same way, given its dates: `arco-make validate --start 1993-01-01 --end 2026-07-01 configs/validate/historical.toml DATASET`.
 
-The sources' versions, the limitations their producers document, and how they fit together (the ocean forced by another atmosphere before 2019) are in [docs/sources.md](sources.md).
+The sources' versions, the limitations their producers document, and how they fit together (the ocean forced by another atmosphere before 2019) are on [the sources' page](sources.md).
 
 ## Data format
 

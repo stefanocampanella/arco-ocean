@@ -1,7 +1,3 @@
----
-license: CC-BY-4.0
----
-
 # Development
 
 The repository holds the recipes (`configs/`), the scripts that run them (`scripts/`, bash),

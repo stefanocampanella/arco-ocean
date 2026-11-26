@@ -73,7 +73,8 @@ in its help). Made on 25 Nov 2026:
   on the project machine, the whole script 11 (the WebP's encoding is the slowest part).
 - **Outputs.**
   - `docs/assets/images/arco-ocean.webp` (480 x 480, 8.3 MB, quality 60: WebP shares little between
-    frames, so its size follows their number): the README's cover, and the web page's,
+    frames, so its size follows their number): the README's cover; the web page shows the
+    still globe and links it, so that it moves and loads only on request,
     loaded when scrolled to (the still globe for readers who ask for less motion).
   - `docs/assets/images/arco-ocean.png`: the first frame's globe, the web page's icon.
   - An MP4 (H.264) and a WebM (VP9), 1080 x 1080, 7.9 and 5.6 MB, for the marketplace: not

@@ -1,7 +1,3 @@
----
-license: CC-BY-4.0
----
-
 # Forecasts
 
 The forecast repositories (`forecast/res=<res>`, recipes `configs/download/forecast_res-<res>.toml`)

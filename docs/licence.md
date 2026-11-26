@@ -1,7 +1,3 @@
----
-license: CC-BY-4.0
----
-
 # Licence
 
 The datasets (historical, statistics and forecasts) are released under the Creative Commons Attribution 4.0 International licence, CC BY 4.0 ([summary](https://creativecommons.org/licenses/by/4.0/), [legal code](https://creativecommons.org/licenses/by/4.0/legalcode)). They are derived from the sources below, whose licences ask that they be credited: each dataset's global `attribution` attribute does so, in the forms the licences prescribe, and must accompany any redistribution of the data or of products derived from them.
@@ -12,6 +8,8 @@ The datasets (historical, statistics and forecasts) are released under the Creat
 | GLO12, Copernicus Marine Service ([10.48670/moi-00016](https://doi.org/10.48670/moi-00016)) | forecasts: ocean, sea ice | as GLORYS12 | as GLORYS12 |
 | ERA5, Copernicus Climate Change Service ([10.24381/cds.adbb2d47](https://doi.org/10.24381/cds.adbb2d47)) | historical, statistics: atmosphere; forecasts: static fields | CC BY 4.0 | "Contains modified Copernicus Climate Change Service information [year]" |
 | ECMWF IFS open data ([data.ecmwf.int](https://data.ecmwf.int/forecasts/), read from its copy on AWS) | forecasts: atmosphere | CC BY 4.0 and the [ECMWF terms of use](https://apps.ecmwf.int/datasets/licences/general/) | "based on data and products of the European Centre for Medium-Range Weather Forecasts (ECMWF)" |
+
+Neither the European Commission nor ECMWF nor Mercator Ocean International is responsible for any use that may be made of the Copernicus information or data the datasets contain.
 
 The Copernicus Marine Service licence (clause 2.6) asks that its record-keeping requirement be passed on: users of the ocean and sea-ice variables are asked to keep records of their use of the data, enough to document and trace it, and to make them available to the Copernicus Marine Service on reasonable notice.
 

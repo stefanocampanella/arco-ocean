@@ -1,7 +1,3 @@
----
-license: CC-BY-4.0
----
-
 # Producing and extending the dataset
 
 The recipes have no dates: the command gives them, so one recipe serves the first download and
