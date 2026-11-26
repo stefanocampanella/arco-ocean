@@ -51,74 +51,103 @@ def complete(path: pathlib.Path, *blocks: tuple[str, str]) -> None:
   run.finish()
 
 
-def read(path: pathlib.Path, extension: bool = False, **options) -> progress.Reading:
-  """The progress of a download that starts now (`main` read first), after `options`' runs."""
-  main = progress.read_main(str(path))
-  return progress.read_progress(str(path), base=main.base, extension=extension, branch=None)
+def follow(path: pathlib.Path, extension: bool = False) -> progress.ProgressState:
+  """A download's state into the repository at `path`, as `start` makes it (read once)."""
+  now = datetime.datetime.now(datetime.UTC)
+  state = progress.ProgressState(
+    name="n", state="running", started_at=now, updated_at=now, heartbeat_seconds=300,
+    start=None if extension else datetime.date(1993, 1, 1), end=datetime.date(2026, 7, 1),
+    done_until=None, last_commit_at=None, repository=str(path), extension=extension,
+  )  # fmt: skip
+  progress.refresh(state)
+  return state
+
+
+def stored_until(state: progress.ProgressState, finished: bool = False) -> datetime.date | None:
+  progress.refresh(state, finished)
+  assert state.error is None
+  return state.done_until
 
 
 def test_no_repository_no_progress(tmp_path) -> None:
-  assert progress.read_main(str(tmp_path / "none")) == progress.Main()
-  reading = progress.read_progress(str(tmp_path / "none"), base=None, extension=False, branch=None)
-  assert reading == progress.Reading()
+  state = follow(tmp_path / "none")
+  assert (state.ready, state.base, state.known, state.done_until) == (True, None, {}, None)
 
 
 def test_the_newest_block_on_the_runs_branch_then_main(tmp_path) -> None:
   path = tmp_path / "repo"
   run = Run(path)
-  main = progress.read_main(str(path))
-
-  def reading(finished: bool = False, branch: str | None = None) -> progress.Reading:
-    return progress.read_progress(
-      str(path), base=main.base, extension=False, branch=branch, finished=finished
-    )
-
+  state = follow(path)
   # The branch, without a commit of its own yet: nothing stored.
-  assert reading().done_until is None
+  assert stored_until(state) is None
   run.block("1993-01-01", "1993-02-02")
   run.block("1993-02-02", "1993-03-06")
-  first = reading()
-  assert first.done_until == datetime.date(1993, 3, 6) and first.branch == run.branch
-  assert first.last_commit_at is not None
-  # Once found, the branch is read by its tip.
-  assert reading(branch=run.branch) == first
-  # Complete: main at the last block, the branch gone.
+  assert stored_until(state) == datetime.date(1993, 3, 6) and state.branch == run.branch
+  assert state.last_commit_at is not None
+  # Complete: main at the last block, the branch gone (a beat reading it then reads main).
   run.finish()
-  assert reading(branch=run.branch).done_until == datetime.date(1993, 3, 6)
-  assert reading(finished=True).done_until == datetime.date(1993, 3, 6)
+  assert stored_until(state) == datetime.date(1993, 3, 6)
+  assert stored_until(state, finished=True) == datetime.date(1993, 3, 6)
 
 
-def test_a_branch_main_has_moved_past_is_not_this_downloads(tmp_path) -> None:
+def test_a_replace_beside_a_failed_run_is_its_own(tmp_path) -> None:
   path = tmp_path / "repo"
-  # A run failed (its branch left), then another replaced the output.
+  complete(path, ("1993-01-01", "1993-02-02"))
+  # A run failed with main where it started: arco-make's --replace starts a new branch beside it.
   failed = Run(path)
   failed.block("1993-01-01", "1997-03-14")
+  state = follow(path)
+  replace = Run(path)
+  # Neither the failed run's blocks nor the output it replaces.
+  assert stored_until(state) is None and state.branch == replace.branch
+  replace.block("1993-01-01", "1993-01-15")
+  assert stored_until(state) == datetime.date(1993, 1, 15)
+
+
+def test_a_run_of_the_other_command_is_not_this_downloads(tmp_path) -> None:
+  path = tmp_path / "repo"
   complete(path, ("1993-01-01", "1993-02-02"))
-  # A new download, with --replace: neither the failed run's blocks nor the output it replaces.
-  main = progress.read_main(str(path))
-  run = Run(path)
-  options = {"base": main.base, "extension": False}
-  before = progress.read_progress(str(path), branch=None, **options)
-  assert (before.done_until, before.last_commit_at) == (None, None)
-  run.block("1993-01-01", "1993-01-15")
-  reading = progress.read_progress(str(path), branch=None, **options)
-  assert (reading.done_until, reading.branch) == (datetime.date(1993, 1, 15), run.branch)
+  state = follow(path)
+  extension = Run(path, "download-extend")
+  extension.block("1993-02-02", "1993-03-06")
+  assert stored_until(state) is None and state.branch is None
 
 
-def test_a_resumed_run_is_this_downloads(tmp_path) -> None:
+def test_a_resumed_run_counts_from_its_next_block(tmp_path) -> None:
   path = tmp_path / "repo"
   failed = Run(path)
   failed.block("1993-01-01", "1993-02-02")
-  # --resume continues the branch: its blocks so far count.
-  reading = read(path)
-  assert (reading.done_until, reading.branch) == (datetime.date(1993, 2, 2), failed.branch)
+  state = follow(path)
+  assert stored_until(state) is None
+  # --resume continues the branch: its blocks so far count with its next.
+  failed.block("1993-02-02", "1993-03-06")
+  assert stored_until(state) == datetime.date(1993, 3, 6) and state.branch == failed.branch
 
 
 def test_an_extension_counts_what_main_holds(tmp_path) -> None:
   path = tmp_path / "repo"
   complete(path, ("1993-01-01", "1993-02-02"))
-  assert read(path, extension=True).done_until == datetime.date(1993, 2, 2)
-  assert read(path).done_until is None
+  state = follow(path, extension=True)
+  assert (state.start, state.done_until) == (datetime.date(1993, 2, 2),) * 2
+  assert follow(path).done_until is None
+
+
+def test_a_first_read_that_fails_is_made_again(tmp_path, monkeypatch) -> None:
+  from arcomake import icechunk_utils
+
+  path = tmp_path / "repo"
+  complete(path, ("1993-01-01", "1993-02-02"))
+  opened = icechunk_utils.existing_repository
+
+  def unreachable(where: str):
+    raise OSError(f"cannot reach {where}")
+
+  monkeypatch.setattr(icechunk_utils, "existing_repository", unreachable)
+  state = follow(path, extension=True)
+  assert state.error == "the repository could not be read: OSError" and not state.ready
+  monkeypatch.setattr(icechunk_utils, "existing_repository", opened)
+  assert stored_until(state) == datetime.date(1993, 2, 2)
+  assert state.ready and state.start == datetime.date(1993, 2, 2)
 
 
 def invoke(state: pathlib.Path, published: pathlib.Path, *args: str):
@@ -182,22 +211,24 @@ def test_an_extension_starts_where_main_ends(tmp_path, files) -> None:
   document = run(
     state, published, "start", "--name", "x_res-1p0", "--repo", str(repo), "--end", "1993-06-01"
   )
-  assert document["start"] == "1993-02-02" and document["done_until"] == "1993-03-06"
+  # The failed extension's blocks count from its next.
+  assert document["start"] == "1993-02-02" and document["done_until"] == "1993-02-02"
   failed.block("1993-03-06", "1993-04-07")
   assert run(state, published, "beat")["done_until"] == "1993-04-07"
 
 
 def test_a_failed_download_and_an_unreadable_repository(tmp_path, files, monkeypatch) -> None:
+  from arcomake import icechunk_utils
+
   state, published = files
 
-  def unreadable(path: str, **_) -> progress.Reading:
+  def unreadable(path: str):
     raise OSError(f"cannot reach {path}")
 
-  monkeypatch.setattr(progress, "read_main", unreadable)
+  monkeypatch.setattr(icechunk_utils, "existing_repository", unreadable)
   document = run(state, published, "start", "--name", "n", "--repo", "/x", "--end", "1993-06-01")
   # The error names no path.
   assert document["error"] == "the repository could not be read: OSError"
-  monkeypatch.setattr(progress, "read_progress", unreadable)
   document = run(state, published, "end", "failed", "--detail", "Killed.")
   assert document["state"] == "failed" and document["detail"] == "Killed."
   assert document["error"] == "the repository could not be read: OSError"

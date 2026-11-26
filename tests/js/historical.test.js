@@ -16,6 +16,7 @@ import {
   dayBefore,
   fraction,
   percent,
+  readDocument,
   period,
   progressUrls,
 } from "../../docs/assets/js/status.js";
@@ -161,6 +162,46 @@ test("the headline: the most worrying resolution", () => {
   verdict = assessDownloads(entries({ "0p25": stale, "0p5": failed, "1p0": finished }), NOW);
   assert.equal(verdict.status, "aborted");
   assert.match(verdict.detail, /^0\.5°: Stopped\. Stored up to 1997-03-13/);
+});
+
+test("a document not published is not started; one that cannot be read is unknown", async () => {
+  const answer = (status, body) => async () => ({
+    status,
+    ok: status >= 200 && status < 300,
+    json: async () => (body === undefined ? JSON.parse("not json") : body),
+  });
+  // S3 answers 403 for a missing key when listing is not allowed.
+  assert.deepEqual(await readDocument("u", answer(403)), { progress: null });
+  assert.deepEqual(await readDocument("u", answer(404)), { progress: null });
+  assert.deepEqual(await readDocument("u", answer(200, { schema: 1 })), {
+    progress: { schema: 1 },
+  });
+  const unreadable = { progress: null, unreadable: true };
+  assert.deepEqual(await readDocument("u", answer(503)), unreadable);
+  assert.deepEqual(await readDocument("u", answer(200)), unreadable);
+  const offline = async () => {
+    throw new TypeError("network");
+  };
+  assert.deepEqual(await readDocument("u", offline), unreadable);
+});
+
+test("the headline: a resolution that cannot be read is not taken for not started", () => {
+  const failed = progress({ state: "failed", detail: "Stopped." });
+  const finished = progress({ state: "finished", done_until: "2026-07-01" });
+  const entries = [
+    { res: "0p25", progress: null, unreadable: true },
+    { res: "0p5", progress: finished },
+    { res: "1p0", progress: null },
+  ];
+  let verdict = assessDownloads(entries, NOW);
+  assert.equal(verdict.status, "unknown");
+  assert.equal(
+    verdict.detail,
+    "0.25°: Could not be read: the bucket out of reach, or the document damaged. Not started: 1.0°.",
+  );
+  // A failure still comes first.
+  entries[2] = { res: "1p0", progress: failed };
+  assert.equal(assessDownloads(entries, NOW).status, "aborted");
 });
 
 test("the headline: finished when every one published is", () => {

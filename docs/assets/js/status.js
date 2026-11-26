@@ -314,15 +314,28 @@ export function assessProgress(progress, now = Date.now()) {
 // The headline's state among the resolutions: the most worrying first.
 const SEVERITY = ["aborted", "stale", "unknown", "downloading", "finished"];
 
+// A resolution whose document could not be read (the bucket out of reach, an error answer, a
+// damaged document), as opposed to one not published (not started).
+const UNREADABLE = {
+  status: "unknown",
+  label: "Unknown",
+  detail: "Could not be read: the bucket out of reach, or the document damaged.",
+};
+
+// A resolution's verdict: its document's, or UNREADABLE.
+function verdictOf(entry, now) {
+  return entry.unreadable ? UNREADABLE : assessProgress(entry.progress, now);
+}
+
 // The historical downloads' state as the card's headline shows it, from each resolution's
-// progress (`entries`: {res, progress}, progress null where none could be read: not started,
-// or the bucket out of reach): the most worrying resolution's verdict, named, and the resolutions
-// not started; finished when every one published is.
+// progress (`entries`: {res, progress, unreadable}; progress null where there is none: not
+// started if not `unreadable`): the most worrying resolution's verdict, named, and the
+// resolutions not started; finished when every one published is.
 export function assessDownloads(entries, now = Date.now()) {
   const judged = (entries ?? [])
-    .filter((entry) => entry.progress)
-    .map((entry) => ({ res: entry.res, verdict: assessProgress(entry.progress, now) }));
-  const missing = (entries ?? []).filter((entry) => !entry.progress);
+    .filter((entry) => entry.progress || entry.unreadable)
+    .map((entry) => ({ res: entry.res, verdict: verdictOf(entry, now) }));
+  const missing = (entries ?? []).filter((entry) => !entry.progress && !entry.unreadable);
   if (judged.length === 0) {
     return {
       status: "unknown",
@@ -418,6 +431,20 @@ async function fetchDocument(url) {
   }
 }
 
+// A resolution's document: {progress} (null if not published: 403, as S3 answers for a missing
+// key when listing is not allowed, or 404), or {progress: null, unreadable: true} (no answer, an
+// error answer, not JSON).
+export async function readDocument(url, fetcher = fetch) {
+  try {
+    const answer = await fetcher(url, { cache: "no-store" });
+    if (answer.status === 403 || answer.status === 404) return { progress: null };
+    if (!answer.ok) return { progress: null, unreadable: true };
+    return { progress: await answer.json() };
+  } catch {
+    return { progress: null, unreadable: true };
+  }
+}
+
 function cell(row, text) {
   const td = document.createElement("td");
   td.textContent = text;
@@ -478,15 +505,15 @@ function dateCell(row, text) {
   return td;
 }
 
-// The documents of the historical downloads at each resolution (none read: every one null).
-function noProgress() {
-  return HISTORICAL_RESOLUTIONS.map((res) => ({ res, progress: null }));
+// Every resolution unreadable: what the card shows when the documents read cannot be shown.
+function unshown() {
+  return HISTORICAL_RESOLUTIONS.map((res) => ({ res, progress: null, unreadable: true }));
 }
 
 // Show the historical downloads' progresses (`entries`: {res, progress}) in the widget's
 // element, as judged at `now`.
 export function showProgress(el, entries, now) {
-  const all = entries ?? noProgress();
+  const all = entries ?? unshown();
   const verdict = assessDownloads(all, now);
   el.querySelector(".status-card").dataset.status = verdict.status;
   el.querySelector(".status-icon").textContent = ICONS[verdict.status];
@@ -495,14 +522,15 @@ export function showProgress(el, entries, now) {
 
   const body = el.querySelector("tbody");
   body.replaceChildren();
-  for (const { res, progress } of all) {
+  for (const entry of all) {
+    const { res, progress } = entry;
     const row = document.createElement("tr");
     cell(row, resolutionLabel(res));
     const ok = progress && progress.schema === 1;
-    if (!progress) {
+    if (!progress && !entry.unreadable) {
       cell(row, "Not started").dataset.state = "pending";
     } else {
-      const own = assessProgress(progress, now);
+      const own = verdictOf(entry, now);
       cell(row, own.label).dataset.state = own.status;
     }
     dateCell(row, ok ? period(progress) : "–");
@@ -552,10 +580,7 @@ export const CARDS = {
     markup: PROGRESS_MARKUP,
     load: (search) =>
       Promise.all(
-        progressUrls(search).map(async ({ res, url }) => ({
-          res,
-          progress: await fetchDocument(url),
-        })),
+        progressUrls(search).map(async ({ res, url }) => ({ res, ...(await readDocument(url)) })),
       ),
     show: showProgress,
   },

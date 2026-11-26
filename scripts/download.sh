@@ -174,6 +174,9 @@ if [[ -n "${STATUS_URL}" ]]; then
     if [[ "${EXTEND}" == false ]]; then
         PROGRESS_START=(--start "${START_DATE}")
     fi
+    # An earlier download's state is not this one's: were this one stopped before its start
+    # writes it, the trap would end the earlier one's.
+    rm -f "${PROGRESS_FILE}"
     # Before the start: a download stopped while it starts ends its progress too.
     trap on_exit EXIT
     trap 'exit 130' INT

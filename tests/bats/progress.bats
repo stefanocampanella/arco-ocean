@@ -140,6 +140,20 @@ download() {
     assert_output --partial "Download of historical_res-1p0 finished"
 }
 
+@test "an earlier download's state is not this one's" {
+    # Its state file left by a download that finished; this one fails before its start writes.
+    mkdir -p "${PROJECT}/logs/download"
+    local state="${PROJECT}/logs/download/progress_historical_res-1p0.json"
+    echo '{"left": "by an earlier download"}' > "${state}"
+    # Its progress cannot even start: the trap's end must not end the earlier download's.
+    stub arco-ocean 'exit 1'
+    ARCO_OCEAN_CLI="${STUBS}/arco-ocean" download
+    assert_success
+    assert_file_not_exists "${state}"
+    run calls
+    assert_line --regexp "^arco-ocean progress .* end finished$"
+}
+
 @test "without --status-url, no progress" {
     run bash "${REPO}/scripts/download.sh" --project-dir "${PROJECT}" \
         --virtual-env "${PROJECT}/venv" --env-file "" --start 1993-01-01 --end 1993-06-01 \
