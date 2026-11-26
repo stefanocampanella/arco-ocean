@@ -25,3 +25,11 @@ path = ["docs/assets/images/arco-ocean.png", "docs/assets/images/arco-ocean.webp
 precedence = "override"
 SPDX-FileCopyrightText = "2026 Stefano Campanella"
 SPDX-License-Identifier = "CC-BY-4.0"
+
+# The citations of the DOIs the site cites, from doi.org (Crossref and DataCite metadata, CC0), so
+# that the site builds without asking doi.org (docs/references.bib).
+[[annotations]]
+path = ["docs/references.bib"]
+precedence = "override"
+SPDX-FileCopyrightText = "NONE"
+SPDX-License-Identifier = "CC0-1.0"

@@ -38,6 +38,11 @@ written once, here; the README points to these pages. To preview it:
 scripts/site.sh start   # http://localhost:3000
 ```
 
+The citations of the DOIs the pages link are in `docs/references.bib`, so that the site builds
+without asking doi.org, which does not always answer: a new DOI needs its entry,
+`curl -sL -H "Accept: application/x-bibtex" https://doi.org/DOI` (`tests/python/test_references.py`
+checks).
+
 The states of the historical downloads, of the statistics and of the forecast collection on the
 home page are MyST `{anywidget}`s of one module, `docs/assets/js/status.js` with its styles in
 `status.css` (the directive copies one file alone), the card chosen by the directive's JSON
