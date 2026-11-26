@@ -134,22 +134,27 @@ def locked(state_file: pathlib.Path) -> Generator[None]:
     yield
 
 
-def load(state_file: pathlib.Path, fresh: bool = False) -> State | None:
-  """The state, or None if there is none. A state file that is not a heartbeat's (another
-  version's, damaged) is an error, unless a collection starts anew (`fresh`): it is then replaced,
-  as otherwise every heartbeat would fail until the file is removed by hand."""
+def load_model[M: BaseModel](model: type[M], state_file: pathlib.Path, fresh: bool) -> M | None:
+  """The state in `state_file`, as `model`, or None if there is none. A state file that is not
+  one (another version's, damaged) is an error, unless a run starts anew (`fresh`): it is then
+  replaced, as otherwise every heartbeat would fail until the file is removed by hand."""
   try:
     text = state_file.read_text()
   except FileNotFoundError:
     return None
   try:
-    return State.model_validate_json(text)
+    return model.model_validate_json(text)
   except ValidationError as error:
     problem = f"{state_file} is not a heartbeat's state ({error.error_count()} errors)"
     if fresh:
       click.echo(f"Warning: {problem}: a new one is written.", err=True)
       return None
-    raise click.ClickException(f"{problem}: the next collection's start replaces it") from error
+    raise click.ClickException(f"{problem}: the next start replaces it") from error
+
+
+def load(state_file: pathlib.Path, fresh: bool = False) -> State | None:
+  """The forecast collection's state (`load_model`)."""
+  return load_model(State, state_file, fresh)
 
 
 def write_atomically(path: pathlib.Path, text: str) -> None:
