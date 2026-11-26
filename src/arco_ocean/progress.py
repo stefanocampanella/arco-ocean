@@ -366,6 +366,16 @@ def summary(progress: Progress) -> str:
   return "\n".join(lines)
 
 
+@progress.command("get")
+@click.argument("field", type=click.Choice(sorted(Progress.model_fields)))
+@pass_files
+def get(files: Files, field: str) -> None:
+  """Print a field of the published document, as published (scripts/alert.sh)."""
+  state = require_started(load(files.state_file, False), files, "run")
+  value = state.model_dump(mode="json", include={field})[field]
+  click.echo("" if value is None else value)
+
+
 @progress.command("summary")
 @pass_files
 def print_summary(files: Files) -> None:

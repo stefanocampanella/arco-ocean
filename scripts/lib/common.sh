@@ -284,40 +284,50 @@ progress() {
 # The run's end (its EXIT trap): the progress ended, and reported with --alert.
 # shellcheck disable=SC2329  # run by the EXIT trap of progress_run
 progress_exit() {
-    local code=$? event=failed
+    local code=$? event=failed status
     heartbeat_stop
+    # The cause: arco-make's last exit status (RUN_STATUS, set by the script: download.sh exits 1
+    # after its attempts whatever they returned), unless the script itself was interrupted.
+    status=${code}
+    if [[ ${code} -ne 0 && ${code} -ne 130 && ${code} -ne 143 && -n "${RUN_STATUS:-}" ]]; then
+        status=${RUN_STATUS}
+    fi
     if [[ ${code} -eq 0 ]]; then
         event=finished
         progress end finished
     elif [[ ${code} -eq ${NOT_PUBLISHED} ]]; then
         progress end failed --detail "Stopped at a forecast run not published yet: the runs before are stored."
     else
-        progress end failed --detail "Stopped (exit status ${code}): ${PROGRESS_AGAIN}"
+        progress end failed --detail "Stopped (exit status ${status}): ${PROGRESS_AGAIN}"
     fi
     if [[ "${ALERT}" == true ]]; then
+        # The run reported: a report still trying when a later run has started is dropped.
+        local started
+        started="$("${ARCO_OCEAN[@]}" progress --state-file "${PROGRESS_FILE}" get started_at 2>/dev/null)"
         # Detached: it tries again for up to half an hour when GitHub cannot be reached.
         setsid bash "${CHECKOUT}/scripts/alert.sh" --kind "${PROGRESS_KIND}" \
-            --name "${PROGRESS_NAME}" --state-file "${PROGRESS_FILE}" --exit-status "${code}" \
-            "${event}" >> "${LOG_DIR}/alert.log" 2>&1 < /dev/null &
+            --name "${PROGRESS_NAME}" --state-file "${PROGRESS_FILE}" --exit-status "${status}" \
+            --run-started "${started}" "${event}" >> "${LOG_DIR}/alert.log" 2>&1 < /dev/null &
     fi
 }
 
-# progress_run KIND NAME REPO [START OPTIONS...]: the run of KIND (download, statistics) of the
-# recipe NAME into REPO starts: its progress, its beat, its EXIT trap (after open_log). Nothing
-# without --status-url nor --alert. START OPTIONS go to `arco-ocean progress start` (--start,
+# progress_run KIND NAME REPO AGAIN [START OPTIONS...]: the run of KIND (download, statistics)
+# of the recipe NAME into REPO starts: its progress, its beat, its EXIT trap (after open_log).
+# AGAIN says how to continue it after a failure, in the progress and the issue ("rerun it with
+# --resume."). Nothing without --status-url nor --alert; with --alert, gh and the token are
+# checked first (alert.sh --check). START OPTIONS go to `arco-ocean progress start` (--start,
 # --end).
 progress_run() {
     PROGRESS_KIND=$1
     PROGRESS_NAME=$2
     local repository=$3
-    shift 3
+    PROGRESS_AGAIN=$4
+    shift 4
     PROGRESS_FILE="${LOG_DIR}/progress_${PROGRESS_NAME}.json"
     HEARTBEAT_PID=""
     if [[ -z "${STATUS_URL}" && "${ALERT}" == false ]]; then return 0; fi
-    if [[ "${PROGRESS_KIND}" == download ]]; then
-        PROGRESS_AGAIN="rerun it with --resume."
-    else
-        PROGRESS_AGAIN="rerun it."
+    if [[ "${ALERT}" == true ]] && ! bash "${CHECKOUT}/scripts/alert.sh" --check; then
+        die "--alert cannot report (see above): fix it, or run without --alert."
     fi
     arco_ocean_command
     # An earlier run's state is not this one's: were this one stopped before its start writes

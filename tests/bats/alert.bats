@@ -22,7 +22,10 @@ if [[ "$*" == "issue list "* ]]; then
 fi
 if [[ "$*" == *"--body-file -"* ]]; then cat >> "${CALLS}.body"; fi
 if [[ -n "${GH_TOKEN:-}" ]]; then echo "token ${GH_TOKEN}" >> "${CALLS}.env"; fi'
-    stub arco-ocean 'echo "**Collection finished.** The heartbeat'"'"'s summary."'
+    # The summary; with `get started_at`, FAKE_STARTED (the run in the state file).
+    stub arco-ocean '
+if [[ "$*" == *" get started_at" ]]; then echo "${FAKE_STARTED:-}"; exit 0; fi
+echo "**Collection finished.** The heartbeat'"'"'s summary."'
     export ARCO_OCEAN_CLI="${STUBS}/arco-ocean" XDG_CONFIG_HOME="${BATS_TEST_TMPDIR}/config"
     TOKEN="${XDG_CONFIG_HOME}/arco-ocean/github-token"
     mkdir -p "$(dirname "${TOKEN}")"
@@ -141,7 +144,9 @@ body() {
     assert_output --partial "**The download of \`historical_res-0p25\` failed**"
     assert_output --partial "exit status \`143\`. It was stopped (SIGTERM)."
     assert_output --partial "The heartbeat's summary."
-    assert_output --partial "run download.sh with --resume again"
+    # How to continue is the progress's own detail, in the summary.
+    assert_output --partial "How to continue: the summary's first line."
+    assert_output --partial "unless \`--log-dir\` was given"
     refute_output --partial "${BATS_TEST_TMPDIR}"
 }
 
@@ -169,6 +174,40 @@ body() {
     FAKE_ISSUES='[]' alert --kind statistics --name historical_res-0p25 --exit-status 0 finished
     assert_success
     assert_output --partial "no open statistics-alert issue for historical_res-0p25, nothing to close"
+}
+
+@test "a report still trying when a later run has started is dropped" {
+    mkdir -p "${PROJECT}/logs"
+    echo "{}" > "${PROJECT}/logs/progress.json"
+    local report=(--kind download --name historical_res-0p25 --exit-status 1
+        --state-file "${PROJECT}/logs/progress.json" --run-started 2026-11-25T09:00:00Z)
+    FAKE_STARTED=2026-11-26T10:00:00Z FAKE_ISSUES='[]' alert "${report[@]}" failed
+    assert_success
+    assert_output --partial "a later run of historical_res-0p25 has started (2026-11-26T10:00:00Z): this report (failed) is dropped"
+    run grep -c "^gh " "${CALLS}"
+    assert_output 0
+    # The same run: reported.
+    FAKE_STARTED=2026-11-25T09:00:00Z FAKE_ISSUES='[]' alert "${report[@]}" failed
+    assert_success
+    run grep -c "^gh issue create" "${CALLS}"
+    assert_output 1
+}
+
+@test "an out-of-memory kill is named" {
+    FAKE_ISSUES='[]' alert --kind statistics --name historical_res-0p25 --exit-status 137 failed
+    assert_success
+    run body
+    assert_output --partial "exit status \`137\`. It was killed (SIGKILL): out of memory, most likely."
+}
+
+@test "--check checks gh and the token, and reports nothing" {
+    alert --check
+    assert_success
+    assert_output --partial "gh and the token are there"
+    assert_file_not_exists "${CALLS}"
+    alert --check --token-file "${TOKEN}.missing"
+    assert_failure 1
+    assert_output --partial "no token file"
 }
 
 @test "a one-off run needs its name and exit status; the forecast takes neither" {

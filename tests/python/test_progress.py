@@ -316,3 +316,14 @@ def test_the_summary_for_an_issue(tmp_path, files) -> None:
   result = CliRunner().invoke(cli, ["progress", "--state-file", str(statistics), "summary"])
   assert result.output.startswith(r"**Statistics historical\_res-1p0: running.**")
   assert "Period" not in result.output
+
+
+def test_get_prints_a_published_field(tmp_path, files) -> None:
+  state, published = files
+  run(state, published, "start", "--kind", "statistics", "--name", "n", "--repo", str(tmp_path))
+  started = json.loads(published.read_text())["started_at"]
+  result = invoke(state, published, "get", "started_at")
+  assert (result.exit_code, result.output) == (0, f"{started}\n")
+  # None as nothing; a private field is not one.
+  assert invoke(state, published, "get", "ended_at").output == "\n"
+  assert invoke(state, published, "get", "repository").exit_code == 2

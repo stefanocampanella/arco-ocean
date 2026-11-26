@@ -66,12 +66,16 @@ no progress to show.
 
 With `--alert`, both scripts report how they end on GitHub (`scripts/alert.sh`, in the
 background, as the forecast collection's alerts, with the same token, see
-[Forecasts](forecasts.md)): a failure (with the exit status, an interruption included) comments on
-the open issue of that recipe, labelled `download-alert` or `statistics-alert` and titled
-"Download RECIPE failed" or "Statistics RECIPE failed", or opens one; a run that succeeds closes
-that recipe's open issues. The issue shows the progress's public summary, never logs. A run killed
-outright, or the machine down, reports nothing: the page calls it stale. A report that fails is
-logged in `LOG_DIR/alert.log`.
+[Forecasts](forecasts.md)); they check `gh` and the token when they start, and stop at once if a
+report could not be made. A failure comments on the open issue of that recipe, labelled
+`download-alert` or `statistics-alert` and titled "Download RECIPE failed" or "Statistics RECIPE
+failed" (how the issue is found: keep the title), or opens one; a run that succeeds closes that
+recipe's open issues. The issue gives arco-make's exit status (an interruption, or a kill for want
+of memory, named) and the progress's public summary, whose first line says how to continue
+(`--resume`, or `--extend --resume` for an extension), never logs. A report still trying (GitHub
+out of reach) when a later run of the recipe has started is dropped. A run killed outright, or the
+machine down, reports nothing: the page calls it stale. A report that fails is logged in
+`LOG_DIR/alert.log`.
 
 Each commit of a repository records how it was made, in its metadata: the version and commit of
 arco-make, the versions of the packages that decide the values, and the recipe's fingerprint.

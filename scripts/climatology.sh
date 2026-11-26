@@ -118,7 +118,7 @@ else
 fi
 
 echo "Statistics of ${INPUT} to ${OUTPUT}, log: ${LOG_FILE} (started $(date -u), host $(hostname))"
-progress_run statistics "${NAME}" "${OUTPUT}"
+progress_run statistics "${NAME}" "${OUTPUT}" "rerun it."
 "${RUN_CMD[@]}" compute-climatology "${FLAGS[@]}" -- \
     "${CONFIG_PATH}" "${INPUT}" "${OUTPUT}" >> "${LOG_FILE}" 2>&1
 STATUS=$?

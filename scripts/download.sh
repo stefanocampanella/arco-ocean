@@ -141,10 +141,12 @@ echo "Download of ${NAME} to ${OUTPUT}, log: ${LOG_FILE} (started $(date -u), PI
 # The progress (--status-url) and the alert (--alert); whatever ends the script (its exits, an
 # error, a signal it can trap), they say how.
 PROGRESS_START=()
+AGAIN="rerun it with --extend --resume."
 if [[ "${EXTEND}" == false ]]; then
     PROGRESS_START=(--start "${START_DATE}")
+    AGAIN="rerun it with --resume."
 fi
-progress_run download "${NAME}" "${OUTPUT}" --end "${END_DATE}" \
+progress_run download "${NAME}" "${OUTPUT}" "${AGAIN}" --end "${END_DATE}" \
     "${PROGRESS_START[@]+"${PROGRESS_START[@]}"}"
 
 STATUS=0
@@ -179,6 +181,8 @@ for (( attempt=1; attempt<=ATTEMPTS; attempt++ )); do
         "${RUN_CMD[@]}" download "${FLAGS[@]}" "${MODE[@]+"${MODE[@]}"}" -- "${CONFIG_PATH}" "${OUTPUT}"
     } >> "${LOG_FILE}" 2>&1
     STATUS=$?
+    # arco-make's own: the progress and the alert report it.
+    RUN_STATUS=${STATUS}
     if [[ ${STATUS} -eq 0 ]]; then
         echo "Download of ${NAME} finished: ${OUTPUT} ($(date -u))."
         exit 0

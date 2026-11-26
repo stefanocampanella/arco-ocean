@@ -195,8 +195,10 @@ alerted() {
         --end 1993-06-01 --attempts 1 historical_res-1p0
     assert_failure 1
     alerted failed
+    # --alert checked first, at the start; at the end, the run's start for the report.
     run grep "^alert.sh" "${CALLS}"
-    assert_output "alert.sh --kind download --name historical_res-1p0 --state-file ${state} --exit-status 1 failed"
+    assert_line --index 0 "alert.sh --check"
+    assert_line --index 1 --regexp "^alert.sh --kind download --name historical_res-1p0 --state-file ${state} --exit-status 1 --run-started 20[0-9-]+T[0-9:.]+Z failed$"
     # The state is kept for the issue's summary, though nothing is published.
     assert_file_exists "${state}"
     assert_file_not_exists "${PUBLISHED}"
@@ -207,7 +209,35 @@ alerted() {
     assert_success
     alerted finished
     run grep "^alert.sh" "${CALLS}"
-    assert_output --partial " --exit-status 0 finished"
+    assert_output --regexp " --exit-status 0 --run-started [^ ]+ finished$"
+}
+
+@test "a download reports arco-make's exit status, and how to continue an extension" {
+    with_alert_stub
+    "${REPO}/.venv/bin/python" "${FIXTURES}/blocks.py" "${DATA_ROOT}/historical/res=1p0" \
+        1993-01-01/1993-02-02
+    # Killed for want of memory at every attempt: download.sh exits 1, arco-make 137.
+    FAKE_CODE=137 run bash "${PROJECT}/scripts/download.sh" --project-dir "${PROJECT}" \
+        --virtual-env "${PROJECT}/venv" --env-file "" --status-url "${PUBLISHED}" --alert \
+        --extend --end 1993-06-01 --attempts 1 historical_res-1p0
+    assert_failure 1
+    assert_equal "$(published 'd["detail"]')" \
+        "Stopped (exit status 137): rerun it with --extend --resume."
+    alerted failed
+    run grep "^alert.sh --kind" "${CALLS}"
+    assert_output --partial " --exit-status 137 "
+}
+
+@test "--alert that cannot report stops the run before it starts" {
+    with_alert_stub
+    stub_at "${PROJECT}/scripts/alert.sh" 'echo "Error: no token file." >&2; exit 1'
+    run bash "${PROJECT}/scripts/download.sh" --project-dir "${PROJECT}" \
+        --virtual-env "${PROJECT}/venv" --env-file "" --alert --start 1993-01-01 \
+        --end 1993-06-01 --attempts 1 historical_res-1p0
+    assert_failure 1
+    assert_output --partial "--alert cannot report"
+    run calls
+    refute_line --partial "arco-make"
 }
 
 @test "the statistics publish their state, and --alert reports a failure" {
@@ -230,5 +260,5 @@ alerted() {
     assert_equal "$(published 'd["state"], "rerun it." in d["detail"]')" "('failed', True)"
     alerted failed
     run grep "^alert.sh" "${CALLS}"
-    assert_output --regexp "^alert.sh --kind statistics --name historical_res-1p0 --state-file .*/logs/climatology/progress_historical_res-1p0.json --exit-status 1 failed$"
+    assert_line --regexp "^alert.sh --kind statistics --name historical_res-1p0 --state-file .*/logs/climatology/progress_historical_res-1p0.json --exit-status 1 --run-started .* failed$"
 }

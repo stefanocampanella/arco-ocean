@@ -40,6 +40,14 @@ const MIN_SILENCE = 15 * MINUTE;
 // recipes' `missing_after`, which the heartbeat publishes (two days if it does not).
 const DEFAULT_MISSING_AFTER_DAYS = 2;
 
+// How long a running document (a heartbeat, a progress) has been silent, if for more than three
+// beats (at least 15 minutes): its run stopped without reporting. Otherwise null.
+export function staleFor(doc, now) {
+  const silence = now - Date.parse(doc.updated_at);
+  const beat = (Number(doc.heartbeat_seconds) || 300) * 1000;
+  return silence <= Math.max(MISSED_BEATS * beat, MIN_SILENCE) ? null : silence;
+}
+
 // "3 min", "2 h 5 min", "1 d 3 h".
 export function duration(ms) {
   const minutes = Math.max(0, Math.floor(ms / MINUTE));
@@ -103,12 +111,10 @@ export function assess(heartbeat, now = Date.now()) {
       detail: `The heartbeat has an unknown format (schema ${heartbeat.schema}).`,
     };
   }
-  const updated = Date.parse(heartbeat.updated_at);
-  const beat = (Number(heartbeat.heartbeat_seconds) || 300) * 1000;
   const staleAfter = (Number(heartbeat.stale_after_hours) || 30) * HOUR;
   if (heartbeat.state === "running") {
-    const silence = now - updated;
-    if (!(silence <= Math.max(MISSED_BEATS * beat, MIN_SILENCE))) {
+    const silence = staleFor(heartbeat, now);
+    if (silence !== null) {
       return {
         status: "stale",
         label: "Stale",
@@ -275,16 +281,15 @@ export function assessProgress(progress, now = Date.now()) {
   const done = doneText(progress);
   const unread = progress.error ? ` (${progress.error}: the next update tries again)` : "";
   if (progress.state === "running") {
-    const silence = now - Date.parse(progress.updated_at);
-    const beat = (Number(progress.heartbeat_seconds) || 300) * 1000;
-    if (!(silence <= Math.max(MISSED_BEATS * beat, MIN_SILENCE))) {
+    const silence = staleFor(progress, now);
+    if (silence !== null) {
       return {
         status: "stale",
         label: "Stale",
         detail:
           `No update for ${duration(silence)}: the download stopped without reporting (the ` +
           `machine down or the process killed)${done ? `, stored ${done}` : ""}. Rerun it with ` +
-          "--resume.",
+          "--resume (--extend --resume for an extension).",
       };
     }
     return {
@@ -321,9 +326,8 @@ export function assessProgress(progress, now = Date.now()) {
 // commit, they have a state and times, no progress.
 function assessStatistics(statistics, now) {
   if (statistics.state === "running") {
-    const silence = now - Date.parse(statistics.updated_at);
-    const beat = (Number(statistics.heartbeat_seconds) || 300) * 1000;
-    if (!(silence <= Math.max(MISSED_BEATS * beat, MIN_SILENCE))) {
+    const silence = staleFor(statistics, now);
+    if (silence !== null) {
       return {
         status: "stale",
         label: "Stale",
@@ -611,63 +615,64 @@ function stateCell(row, entry, now) {
   cell(row, own.label).dataset.state = own.status;
 }
 
-// Show the historical downloads' progresses (`entries`: {res, progress}) in the widget's
-// element, as judged at `now`.
-export function showProgress(el, entries, now) {
+// Show each resolution's document (`entries`: {res, progress, unreadable}; none: unshown) in the
+// widget's element, as judged at `now`: the headline (`assessRuns` for `card`), then a row per
+// resolution, its resolution and state, then the card's own cells (`cells(row, progress, now)`,
+// progress null where there is none).
+function showRows(el, entries, now, card, cells) {
   const all = entries ?? unshown();
-  showHeadline(el, assessRuns(all, now, "historical"));
-
+  showHeadline(el, assessRuns(all, now, card));
   const body = el.querySelector("tbody");
   body.replaceChildren();
   for (const entry of all) {
-    const { res, progress } = entry;
     const row = document.createElement("tr");
-    cell(row, resolutionLabel(res));
-    const ok = progress && progress.schema === 1;
+    cell(row, resolutionLabel(entry.res));
     stateCell(row, entry, now);
-    dateCell(row, ok ? period(progress) : "–");
-    const share = ok ? fraction(progress) : null;
-    const stored = dateCell(
-      row,
-      ok && progress.done_until
-        ? `${dayBefore(progress.done_until)}${share === null ? "" : ` (${percent(share)})`}`
-        : "–",
-    );
-    if (share !== null) {
-      const bar = document.createElement("progress");
-      bar.className = "status-progress";
-      bar.max = 1;
-      bar.value = share;
-      bar.textContent = percent(share);
-      bar.setAttribute("aria-label", `Share of the period stored at ${resolutionLabel(res)}`);
-      stored.append(bar);
-    }
-    dateCell(row, ok ? ago(progress.last_commit_at, now) : "–");
-    dateCell(row, ok ? ago(progress.updated_at, now) : "–");
+    const ok = entry.progress && entry.progress.schema === 1;
+    cells(row, ok ? entry.progress : null, now, entry.res);
     body.append(row);
   }
   el.querySelector('[data-field="checked"]').textContent = utc(new Date(now).toISOString());
 }
 
-// Show the statistics' states (`entries`: {res, progress}) in the widget's element, as judged at
-// `now`.
-export function showStatistics(el, entries, now) {
-  const all = entries ?? unshown();
-  showHeadline(el, assessRuns(all, now, "statistics"));
-  const body = el.querySelector("tbody");
-  body.replaceChildren();
-  for (const entry of all) {
-    const { res, progress } = entry;
-    const row = document.createElement("tr");
-    cell(row, resolutionLabel(res));
-    const ok = progress && progress.schema === 1;
-    stateCell(row, entry, now);
-    dateCell(row, ok ? utc(progress.started_at) : "–");
-    dateCell(row, ok ? ago(progress.updated_at, now) : "–");
-    dateCell(row, ok && progress.last_commit_at ? utc(progress.last_commit_at) : "–");
-    body.append(row);
+// A download's cells: period, last day stored (with its bar), last block committed, last update.
+function progressCells(row, progress, now, res) {
+  dateCell(row, progress ? period(progress) : "–");
+  const share = progress ? fraction(progress) : null;
+  const stored = dateCell(
+    row,
+    progress?.done_until
+      ? `${dayBefore(progress.done_until)}${share === null ? "" : ` (${percent(share)})`}`
+      : "–",
+  );
+  if (share !== null) {
+    const bar = document.createElement("progress");
+    bar.className = "status-progress";
+    bar.max = 1;
+    bar.value = share;
+    bar.textContent = percent(share);
+    bar.setAttribute("aria-label", `Share of the period stored at ${resolutionLabel(res)}`);
+    stored.append(bar);
   }
-  el.querySelector('[data-field="checked"]').textContent = utc(new Date(now).toISOString());
+  dateCell(row, progress ? ago(progress.last_commit_at, now) : "–");
+  dateCell(row, progress ? ago(progress.updated_at, now) : "–");
+}
+
+// The statistics' cells: started, last update, stored.
+function statisticsCells(row, statistics, now) {
+  dateCell(row, statistics ? utc(statistics.started_at) : "–");
+  dateCell(row, statistics ? ago(statistics.updated_at, now) : "–");
+  dateCell(row, statistics?.last_commit_at ? utc(statistics.last_commit_at) : "–");
+}
+
+// Show the historical downloads' progresses in the widget's element.
+export function showProgress(el, entries, now) {
+  showRows(el, entries, now, "historical", progressCells);
+}
+
+// Show the statistics' states in the widget's element.
+export function showStatistics(el, entries, now) {
+  showRows(el, entries, now, "statistics", statisticsCells);
 }
 
 // The heartbeat's URL: the page's ?status=, else the bucket's (written once, here).
