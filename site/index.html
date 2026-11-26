@@ -8,7 +8,7 @@ SPDX-License-Identifier: MIT
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ARCO-OCEAN</title>
-  <meta name="description" content="ARCO-OCEAN: an analysis-ready, cloud-optimized dataset of the ocean and sea ice with their atmospheric and hydrological forcing, for machine learning. Historical data, statistics and daily forecasts.">
+  <meta name="description" content="ARCO-OCEAN: an analysis-ready, cloud-optimized dataset of the ocean and sea ice with their atmospheric forcing, for machine learning. Historical data, statistics and daily forecasts.">
   <link rel="icon" href="arco-ocean.png">
   <link rel="stylesheet" href="style.css">
   <script type="module" src="dashboard.js"></script>
@@ -18,7 +18,7 @@ SPDX-License-Identifier: MIT
     <img src="arco-ocean.png" alt="" width="96" height="96">
     <div>
       <h1>ARCO-OCEAN</h1>
-      <p class="tagline">The ocean and sea ice with their atmospheric and hydrological forcing, analysis-ready and cloud-optimized, for machine learning.</p>
+      <p class="tagline">The ocean and sea ice with their atmospheric forcing, analysis-ready and cloud-optimized, for machine learning.</p>
       <nav>
         <a href="#forecast-status">Forecast status</a>
         <a href="#products">Products</a>
@@ -33,7 +33,7 @@ SPDX-License-Identifier: MIT
 
   <main>
     <section>
-      <p>ARCO-OCEAN gives the ocean state and its forcing on regular latitude-longitude grids at 0.25°, 0.5° and 1°, one value a day, from 1 January 1993 to 30 June 2026: the ocean and sea ice from the GLORYS12 reanalysis (49 levels, to 5275 m), the atmosphere from ERA5, the rivers' discharge into the ocean from GloFAS. Each coarse resolution is made from the sources, so that every cell keeps the water, ice and river input of the source cells under it. Daily forecasts of the same variables, from the operational systems of the same producers, continue it.</p>
+      <p>ARCO-OCEAN gives the ocean state and its forcing on regular latitude-longitude grids at 0.25°, 0.5° and 1°, one value a day, from 1 January 1993 to 30 June 2026: the ocean and sea ice from the GLORYS12 reanalysis (49 levels, to 5275 m) and the atmosphere from ERA5. Each coarse resolution is made from the sources, so that every cell keeps the water and ice of the source cells under it. Daily forecasts of the same variables, from the operational systems of the same producers, continue it.</p>
       <p>It is built for training machine learning models of the ocean, such as coupled atmosphere-ocean models for subseasonal-to-seasonal forecasts, and is stored as <a href="https://icechunk.io/">Icechunk</a> repositories on AWS S3, readable without credentials.</p>
       <!-- A year of sea surface temperature and sea ice (scripts/animation.py, 8.3 MB: loaded
            when scrolled to; the still globe for readers who ask for less motion). -->
@@ -83,9 +83,9 @@ SPDX-License-Identifier: MIT
             <tr><th scope="col">Product</th><th scope="col">Path</th><th scope="col">Content</th></tr>
           </thead>
           <tbody>
-            <tr><td>Historical</td><td><code>historical/res=&lt;res&gt;</code></td><td>Daily values, 1993-01-01 to 2026-06-30: GLORYS12 (temperature, salinity, currents, sea surface height, sea ice), ERA5 (2 m temperature and dew point, sea-level pressure, 10 m wind, radiation, precipitation), GloFAS (river discharge into the ocean), and the cells' geometry (sea fraction, areas, volumes, bounds).</td></tr>
+            <tr><td>Historical</td><td><code>historical/res=&lt;res&gt;</code></td><td>Daily values, 1993-01-01 to 2026-06-30: GLORYS12 (temperature, salinity, currents, sea surface height, sea ice), ERA5 (2 m temperature and dew point, sea-level pressure, 10 m wind, radiation, precipitation), and the cells' geometry (sea fraction, areas, volumes, bounds).</td></tr>
             <tr><td>Statistics</td><td><code>statistics/res=&lt;res&gt;</code></td><td>The climatology and the standard deviation of the anomalies over 1993–2023, by day of the year (groups <code>climatology</code> and <code>anomaly_std</code>).</td></tr>
-            <tr><td>Forecast</td><td><code>forecast/res=&lt;res&gt;</code></td><td>The daily 00 UTC runs, 10 lead days, the last five years of runs: GLO12, IFS HRES and the GloFAS forecast, on the historical dataset's grids and variables, with a flag per component.</td></tr>
+            <tr><td>Forecast</td><td><code>forecast/res=&lt;res&gt;</code></td><td>The daily 00 UTC runs, 10 lead days, the last five years of runs: GLO12 and IFS HRES, on the historical dataset's grids and variables, with a flag per component.</td></tr>
           </tbody>
         </table>
       </div>
@@ -114,14 +114,14 @@ dataset = xr.open_zarr(repo.readonly_session("main").store, consolidated=False)<
       <ul>
         <li><a href="https://github.com/stefanocampanella/arco-ocean#readme">The dataset's description</a>: every variable, its source and how it is made, the forecasts, the checks.</li>
         <li><a href="https://github.com/stefanocampanella/arco-ocean/blob/main/docs/sources.md">The sources</a>: their versions, the limitations their producers document, and how they fit together.</li>
-        <li><a href="https://github.com/stefanocampanella/arco-ocean/blob/main/docs/coarsen-ocean-datasets.md">Coarsening ocean datasets</a>: the sea fraction, the fills, the sea ice and the river outlets.</li>
+        <li><a href="https://github.com/stefanocampanella/arco-ocean/blob/main/docs/coarsen-ocean-datasets.md">Coarsening ocean datasets</a>: the sea fraction, the fills, the sea ice and the river outlets (not in version 2).</li>
         <li><a href="https://github.com/stefanocampanella/arco-make">arco-make</a>, the program that builds ARCO-OCEAN from its recipes (<code>configs/</code>).</li>
       </ul>
     </section>
 
     <section id="licence" aria-labelledby="licence-title">
       <h2 id="licence-title">Licence and credits</h2>
-      <p>The datasets are released under the <a href="https://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0</a> licence. Each repository's <code>attribution</code> attribute credits its sources in the forms their licences prescribe, and must accompany any redistribution: Generated using E.U. Copernicus Marine Service Information (<a href="https://doi.org/10.48670/moi-00021">GLORYS12</a>, <a href="https://doi.org/10.48670/moi-00016">GLO12</a>); contains modified Copernicus Climate Change Service information (<a href="https://doi.org/10.24381/cds.adbb2d47">ERA5</a>) and modified Copernicus Emergency Management Service information (<a href="https://doi.org/10.24381/cds.a4fdd6b9">GloFAS</a>); based on data and products of the European Centre for Medium-Range Weather Forecasts (ECMWF). The GloFAS forecasts are for information only: they are not flood warnings. The Copernicus Marine Service licence asks the users of the ocean and sea-ice variables to keep records of their use of the data and to make them available to the Service on reasonable notice. The code is released under the MIT licence. Details in the <a href="https://github.com/stefanocampanella/arco-ocean#license">README</a>.</p>
+      <p>The datasets are released under the <a href="https://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0</a> licence. Each repository's <code>attribution</code> attribute credits its sources in the forms their licences prescribe, and must accompany any redistribution: Generated using E.U. Copernicus Marine Service Information (<a href="https://doi.org/10.48670/moi-00021">GLORYS12</a>, <a href="https://doi.org/10.48670/moi-00016">GLO12</a>); contains modified Copernicus Climate Change Service information (<a href="https://doi.org/10.24381/cds.adbb2d47">ERA5</a>); based on data and products of the European Centre for Medium-Range Weather Forecasts (ECMWF). The Copernicus Marine Service licence asks the users of the ocean and sea-ice variables to keep records of their use of the data and to make them available to the Service on reasonable notice. The code is released under the MIT licence. Details in the <a href="https://github.com/stefanocampanella/arco-ocean#license">README</a>.</p>
     </section>
 
     <section id="citation" aria-labelledby="citation-title">

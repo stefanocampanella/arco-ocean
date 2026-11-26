@@ -183,80 +183,6 @@ variables = ["lat", "lon", "time"]
 name = "drop_attrs"
 deep = false
 
-# ==== GLOFAS SECTION ====
-
-# River input to the ocean: the discharge at the pits of GloFAS's drainage network (local drain
-# direction 5, where rivers end), as metres of water per day over each coarse cell, like a daily
-# precipitation total; regridded conservatively, the total kept (checked). GloFAS v5.0 publishes
-# no drainage directions: v4.0's are on the same cells.
-[[datasets.glofas.parts]]
-filename_or_obj = "ewds://cems-glofas-historical"
-engine = "earlywarningdatastore"
-system_version = "version_5_0"
-hydrological_model = "lisflood"
-product_type = "consolidated"
-timespan = "time_mean"
-variable = "average_river_discharge_in_the_last_24_hours"
-
-[[datasets.glofas.parts]]
-filename_or_obj = "https://confluence.ecmwf.int/download/attachments/242067380/ldd_glofas_v4_0.nc"
-engine = "netcdfoverhttp"
-drop_variables = ["crs"]
-rename = {lat = "latitude", lon = "longitude"}
-# The file's coordinates differ from the discharge's by about 4e-12.
-coordinate_tolerance = 1e-9
-
-[[datasets.glofas.postprocess]]
-name = "keep_where"
-variables = ["avg_dis"]
-condition = "ldd"
-equals = 5
-
-[[datasets.glofas.postprocess]]
-name = "drop_vars"
-names = ["ldd"]
-
-[[datasets.glofas.postprocess]]
-name = "per_unit_area"
-variables = ["avg_dis"]
-factor = 86400.0
-radius = 6378100.0
-
-[[datasets.glofas.postprocess]]
-name = "regrid"
-method = "conservative"
-latitude_dim = "latitude"
-longitude_dim = "longitude"
-kwargs = {skipna = false}
-conservation_tolerance = 1e-6
-grid = "target"
-
-# No river south of GloFAS's domain (-60): 0 there, where the regridding leaves NaN.
-[[datasets.glofas.postprocess]]
-name = "fillna"
-value = 0.0
-
-[[datasets.glofas.postprocess]]
-name = "astype"
-casting = "same_kind"
-dtype = "float32"
-
-[[datasets.glofas.postprocess]]
-name = "rename"
-name_dict = {avg_dis = "dis24_outlets"}
-
-[[datasets.glofas.postprocess]]
-name = "rename_coordinates"
-name_dict = {latitude = "lat", longitude = "lon"}
-
-[[datasets.glofas.postprocess]]
-name = "drop_var_attrs"
-variables = ["lat", "lon", "time"]
-
-[[datasets.glofas.postprocess]]
-name = "drop_attrs"
-deep = false
-
 # ==== GLORYS SECTION ====
 
 # All latitudes are read: the rows the static mask calls sea without values (-77 and 90) leave
@@ -606,12 +532,6 @@ cell_methods = "area: mean where sea"
 cell_measures = "area: areacello"
 comment = "GLORYS12 siconc x vsi averaged over the cell's sea part. The ice velocity (mean over the ice) is vsic / siconc where siconc > 0."
 
-[postprocess.dis24_outlets]
-long_name = "river discharge into the ocean per unit area"
-units = "m"
-cell_measures = "area: areacello"
-comment = "GloFAS v5.0 discharge (mean of 24 h) at the pits of its drainage network (local drain direction 5, LDD v4.0), divided by the cell's area: metres of water per day over the whole cell, as a daily precipitation total. Discharge (m3/s) = value x cell area / 86400. Pits of basins without outlet (Caspian, Lake Chad) are included."
-
 # The atmospheric variables: ERA5's long_name, short_name and units, CF standard names (ERA5
 # gives ssrd the flux's, W m-2, for a total in J m-2, and strd, tp and the others none), and
 # the daily reduction (cell_methods).
@@ -674,15 +594,15 @@ cell_methods = "time: sum"
 [[postprocess]]
 name = "assign_attrs"
 title = "ARCO-OCEAN: Analysis-Ready Cloud-Optimized Ocean Dataset"
-summary = "A cloud-optimized dataset of ocean physical properties, sea ice, and atmospheric/hydrological forcing designed for training data-driven ocean models."
+summary = "A cloud-optimized dataset of ocean physical properties, sea ice, and atmospheric forcing designed for training data-driven ocean models."
 id = "https://doi.org/10.5281/zenodo.24471954"
 Conventions = "CF-1.8, ACDD-1.3"
 institution = "National Institute of Oceanography and Applied Geophysics - OGS"
 creator_name = "OGS ARCO-OCEAN Development Team"
-source = "Merged retrospective reanalyses and hindcasts: CMEMS GLORYS12 (ocean & sea ice), ECMWF ERA5 (atmosphere), and GloFAS v5.0 (river discharge)."
+source = "Merged retrospective reanalyses and hindcasts: CMEMS GLORYS12 (ocean & sea ice) and ECMWF ERA5 (atmosphere)."
 history = "Regridded conservatively from the native grids to a global 0.5 deg regular grid; written as an Icechunk repository (Zarr v3), in chunks of one day and level, sharded by 8 days and all levels."
 license = "CC-BY-4.0"
-attribution = "Generated using E.U. Copernicus Marine Service Information (GLORYS12, https://doi.org/10.48670/moi-00021). Contains modified Copernicus Climate Change Service information 2026 (ERA5, https://doi.org/10.24381/cds.adbb2d47, CC BY 4.0) and modified Copernicus Emergency Management Service information 2026 (GloFAS v5.0, https://doi.org/10.24381/cds.a4fdd6b9). Neither the European Commission nor ECMWF nor Mercator Ocean International is responsible for any use that may be made of the Copernicus information or data it contains."
+attribution = "Generated using E.U. Copernicus Marine Service Information (GLORYS12, https://doi.org/10.48670/moi-00021). Contains modified Copernicus Climate Change Service information 2026 (ERA5, https://doi.org/10.24381/cds.adbb2d47, CC BY 4.0). Neither the European Commission nor ECMWF nor Mercator Ocean International is responsible for any use that may be made of the Copernicus information or data it contains."
 references = "https://github.com/stefanocampanella/arco-ocean"
 featureType = "grid"
 

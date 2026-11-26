@@ -19,9 +19,9 @@ This dataset is the first to include both the ocean state and its forcing, and h
 
 ## Data
 
-ARCO-OCEAN is an analysis-ready cloud-optimized ([Abernathey et al., 2021](https://doi.org/10.1109/MCSE.2021.3059437)) dataset providing physical properties of the ocean and sea ice for a period of about 33 years, from the 1st of January 1993 to the 30th of June 2026, the last day every source gives as final data (November 2026). The dataset includes also atmospheric and hydrological variables that would be needed as boundary conditions and used to drive a numerical simulation. The dataset is the result of collecting, processing, merging and optimizing for the cloud different data sources, all retrospective analyses (reanalyses) or hindcasts of different Earth system components.
+ARCO-OCEAN is an analysis-ready cloud-optimized ([Abernathey et al., 2021](https://doi.org/10.1109/MCSE.2021.3059437)) dataset providing physical properties of the ocean and sea ice for a period of about 33 years, from the 1st of January 1993 to the 30th of June 2026, the last day every source gives as final data (November 2026). The dataset includes also atmospheric variables that would be needed as boundary conditions and used to drive a numerical simulation. The dataset is the result of collecting, processing, merging and optimizing for the cloud different data sources, all retrospective analyses (reanalyses) or hindcasts of different Earth system components.
 
-The fields are given on regular latitude-longitude grids at three horizontal resolutions: 0.25°, 0.5° and 1°. The finest is the resolution of most state-of-the-art machine learning weather forecasting models trained on the retrospective analysis ERA5 ([Hersbach et al., 2020](https://doi.org/10.1002/qj.3803)), and ERA5's own grid; the coarser ones are made from the same sources, not from the 0.25° data, so that every coarse cell keeps the water, ice and river input of the source cells under it. Many of the variables in ARCO-OCEAN were originally defined on an Arakawa C grid and afterward interpolated on cell centers before being further postprocessed and ingested in the dataset. Please refer to the documentation of individual source datasets for more details. Also, see the section on regridding below.
+The fields are given on regular latitude-longitude grids at three horizontal resolutions: 0.25°, 0.5° and 1°. The finest is the resolution of most state-of-the-art machine learning weather forecasting models trained on the retrospective analysis ERA5 ([Hersbach et al., 2020](https://doi.org/10.1002/qj.3803)), and ERA5's own grid; the coarser ones are made from the same sources, not from the 0.25° data, so that every coarse cell keeps the water and ice of the source cells under it. Many of the variables in ARCO-OCEAN were originally defined on an Arakawa C grid and afterward interpolated on cell centers before being further postprocessed and ingested in the dataset. Please refer to the documentation of individual source datasets for more details. Also, see the section on regridding below.
 
 The temporal resolution of ARCO-OCEAN is 1 day. The simulation timestep of numerical models is usually much less than that, and source datasets distribute either system state snapshots or time averages (or accumulations, e.g., for precipitation) at lower temporal resolutions. On top of that, the ARCO-OCEAN postprocessing further reduces the temporal resolution of some of these datasets. Individual sections of documentation provide more details.
 
@@ -57,7 +57,7 @@ Values are averages over the sea part of each cell. GLORYS12's sea ice thickness
 | `volcello`                           | Sea water volume of the cell: `seafrac` × layer thickness × `areacello` | float32   | m³    |
 | `lat_bnds`, `lon_bnds`, `depth_bnds` | CF cell bounds (depth: GLORYS12's layer faces)                          | float32   | ° / m |
 
-Ocean and sea ice values exist exactly where `seafrac > 0`. Volumes and heat contents are sums of value × `volcello`; areas and river totals use `areacello` (discharge in m³/s = `dis24_outlets` × `areacello` / 86400). The variables name these weights in `cell_measures`. How these fields are built, and why, is in the [notes on coarsening ocean datasets](docs/coarsen-ocean-datasets.md).
+Ocean and sea ice values exist exactly where `seafrac > 0`. Volumes and heat contents are sums of value × `volcello`; areas use `areacello`. The variables name these weights in `cell_measures`. How these fields are built, and why, is in the [notes on coarsening ocean datasets](docs/coarsen-ocean-datasets.md).
 
 [^1]: Global Ocean Physics Reanalysis. E.U. Copernicus Marine Service Information (CMEMS). Marine Data Store (MDS). DOI: 10.48670/moi-00021 (Accessed on 10-Oct-2025)
 
@@ -103,22 +103,9 @@ Time invariants are read from the same ARCO-ERA5 store at one stamp, 2000-01-01 
 [^4]: Copernicus Climate Change Service, Climate Data Store, (2023): ERA5 hourly data on single levels from 1940 to present. Copernicus Climate Change Service (C3S) Climate Data Store (CDS). DOI: 10.24381/cds.adbb2d47 (Accessed on 10-Oct-2025)
 
 
-### Hydrological
+### Rivers
 
-Hydrological variables and their auxiliary data are derived from historical GloFAS data[^6] and downloaded from EWDS[^7], hence the dataset contains modified Copernicus Emergency Management Service information 2025. The European Commission is not responsible for any use that may be made of the Copernicus information or data it contains.
-
-River runoff is required to compute the freshwater budget of the ocean, along with the evaporation, sea ice, and precipitation. For this reason, ARCO-OCEAN contains the discharge of global rivers (including sediments, chemical and biological material) in the last 24 hours, taken from GloFAS. This value, although not assimilated, is computed by forcing a hydrological model with an atmospheric reanalysis (ERA5). Whether a machine learning model could make use of this information and, for example, remove the contribution of sediments to the volumetric flow rate is still an open research question.
-
-| Variable name   | Description                                                     | Data type | Units | Assimilated |
-|-----------------|-----------------------------------------------------------------|-----------|-------|-------------|
-| `dis24_outlets` | River discharge into the ocean, metres per day over each cell   | float32   | m     | No          |
-
-The discharge (GloFAS v5.0, mean of 24 h) is taken at the pits of GloFAS's drainage network (local drain direction 5, from the v4.0 auxiliary data), where rivers end, divided by the area of the cell and regridded conservatively: like a daily precipitation total, and the global total is kept (checked at every step). The discharge of a cell, in m^3/s, is the value × `areacello` / 86400. The ocean model links the outlets to its coast; pits of basins without an outlet to the sea (Caspian, Lake Chad) are included.
-
-[^6]: Grimaldi, S., Salamon, P., Disperati, J., Zsoter, E., Russo, C., Ramos, A., Carton De Wiart, C., Barnard, C., Hansford, E., Gomes, G., Prudhomme, C. (2022): River discharge and related historical data from the Global Flood Awareness System, v4.0. European Commission, Joint Research Centre (JRC). DOI: 10.24381/cds.a4fdd6b9 (Accessed on 10-Oct-2025)
-
-[^7]: Joint Research Center, Copernicus Emergency Management Service (2019): River discharge and related historical data from the Global Flood Awareness System. Early Warning Data Store (EWDS). DOI: 10.24381/cds.a4fdd6b9 (Accessed on 10-Oct-2025)
-
+Version 2 has no river discharge. Version 1 published GloFAS's river discharge (v4.0, `dis24`). GloFAS is distributed only by the Early Warning Data Store (EWDS), whose queue held requests for many hours at a time in November 2026. Version 2.1 will bring the rivers back, as the discharge of GloFAS v5.0 at the rivers' mouths (`dis24_outlets`). Its recipes and documentation are at the tag `rivers-last` of this repository, and the method is in the [notes on coarsening ocean datasets](docs/coarsen-ocean-datasets.md).
 
 ### Notes on regridding, null values, and masking
 
@@ -126,14 +113,13 @@ All fields are regridded conservatively with `xarray-regrid` ([Schilperoort et a
 
 - Ocean fields: averages over the sea part of each cell. A cell is sea (has values) where `seafrac > 0`, i.e. where GLORYS12 has some sea cell: GLORYS12's 3D mask regridded is `seafrac`, so the domain is static and every regridded value has a cell. The few sea cells where GLORYS12 has no value (its gaps, the same every day) take the nearest value above in the same column, or 0 if none. Outside the sea, values are missing (NaN).
 - Sea ice: averages over the sea part, no ice as 0 (section above).
-- River discharge: a flux per unit area, regridded with missing values as 0.
 - ERA5: values everywhere. The `land_sea_mask`, renamed `lsm`, is ERA5's fraction of land in each cell, which is not GLORYS12's sea: use `seafrac` for the ocean.
 
-The [notes on coarsening ocean datasets](docs/coarsen-ocean-datasets.md) explain these choices, with measurements at 0.25°, 0.5° and 1°: which coarse cells to call sea, how the water of each layer is kept, how gaps are filled, sea ice and river discharge.
+The [notes on coarsening ocean datasets](docs/coarsen-ocean-datasets.md) explain these choices, with measurements at 0.25°, 0.5° and 1°: which coarse cells to call sea, how the water of each layer is kept, how gaps are filled, sea ice, and river discharge (not in version 2).
 
 Every block of the download is checked before it is written: a complete daily time axis, the grid convention, ocean and sea ice values exactly where `seafrac > 0` and every other variable everywhere, and a `long_name` and `units` on every variable, no two variables sharing a `long_name`. `configs/validate/historical.toml` checks a whole dataset the same way, given its dates: `arco-make validate --start 1993-01-01 --end 2026-07-01 configs/validate/historical.toml DATASET`.
 
-The sources' versions, the limitations their producers document, and how they fit together (the ocean forced by another atmosphere before 2019, climatological runoff) are in [docs/sources.md](docs/sources.md).
+The sources' versions, the limitations their producers document, and how they fit together (the ocean forced by another atmosphere before 2019) are in [docs/sources.md](docs/sources.md).
 
 ## Producing and extending the dataset
 
@@ -196,8 +182,8 @@ GLORYS12 (with GLO12's own static fields: its sea differs from GLORYS12's in abo
 native cells, and `volcello` counts its partial bottom cells, which GLORYS12's static product does
 not give: 0.75 % less water in all, up to 7 % less in the deepest levels, more in level 48, which
 takes in level 49; the `deptho` comments tell how each product's sea floor differs from its
-water column); IFS HRES from ECMWF's open data for ERA5 (the static `z` and `lsm` stay ERA5's);
-the GloFAS forecast's control member for GloFAS's discharge. `scripts/forecast.sh` collects
+water column); IFS HRES from ECMWF's open data for ERA5 (the static `z` and `lsm` stay ERA5's).
+`scripts/forecast.sh` collects
 them at every resolution: the first time with `--start`, from the end of the historical dataset,
 then every day, adding the runs after the last stored one (a missed day is caught up).
 
@@ -221,9 +207,9 @@ the scripts' `DATA_ROOT` in their settings file. The scripts also source `script
 The daily collection runs as systemd user units, versioned in `systemd/`:
 `arco-ocean-forecast.timer` starts `arco-ocean-forecast.service`, which runs
 `scripts/forecast.sh --status-url s3://ogs-arco-ocean/status/forecast.json` with the options given
-to `scripts/install_units.sh` after `--`. 12:00 UTC is two hours after the last source published
-today's run on 23 Nov 2026 (GLO12 by 06:00 UTC, IFS on AWS at 07:30, the GloFAS forecast between
-09:45 and 10:00), so that a late release still makes it; a run still missing is tried again
+to `scripts/install_units.sh` after `--`. 12:00 UTC is hours after the sources published
+today's run on 23 Nov 2026 (GLO12 by 06:00 UTC, IFS on AWS at 07:30), so that a late release
+still makes it; a run still missing is tried again
 (below), else the next day. Compared with cron:
 - a day the machine was off is collected when it starts again, and a collection still running is
   not started twice;
@@ -247,7 +233,7 @@ A run whose sources have not all published it yet (younger than two days) is not
 runs before it are, and it is tried again (every 30 minutes, 6 times), else collected the next
 day; older, a source without it gives NaN, flagged. Collections never overlap. GLO12 overwrites its past
 releases: a run collected after its day (the backfill, a missed day) holds the values of later
-releases. Each component has a flag variable (`ifs_forecast`, `glofas_forecast`,
+releases. Each component has a flag variable (`ifs_forecast`,
 `glo12_forecast`; `init_time` x `lead_time`), true where its values are its run's own forecast,
 false where they come from later releases or are missing (a source without the run: NaN).
 
@@ -311,8 +297,7 @@ The forecast repositories have the dimensions `init_time` (the run, 00 UTC of it
 `lead_time` (0 to 9 days), `depth`, `lat` and `lon`, and the coordinate `valid_time` (`init_time`
 \+ `lead_time`, the day a value is for, as `time` in the historical dataset). A chunk is one run,
 lead day and level over the whole grid; a shard holds a whole run. IFS daily means take 8
-samples a day to day 5, then 4 (ERA5's: 24); the GloFAS forecast is the operational model (v4.x
-in November 2026), the historical dataset GloFAS v5.0.
+samples a day to day 5, then 4 (ERA5's: 24).
 
 The statistics (the climatology and the anomaly standard deviation, from `scripts/climatology.sh`) are computed over the reference period 1993-2023, a 30-year normal as climatological normals are. Models evaluated on years inside it see them in their normalization.
 
@@ -372,10 +357,9 @@ The datasets (historical, statistics and forecasts) are released under the Creat
 | GLORYS12, Copernicus Marine Service ([10.48670/moi-00021](https://doi.org/10.48670/moi-00021)) | historical, statistics: ocean, sea ice | [Copernicus Marine Service licence](https://marine.copernicus.eu/user-corner/service-commitments-and-licence) | "Generated using E.U. Copernicus Marine Service Information", with the DOIs, visible where the data are accessed |
 | GLO12, Copernicus Marine Service ([10.48670/moi-00016](https://doi.org/10.48670/moi-00016)) | forecasts: ocean, sea ice | as GLORYS12 | as GLORYS12 |
 | ERA5, Copernicus Climate Change Service ([10.24381/cds.adbb2d47](https://doi.org/10.24381/cds.adbb2d47)) | historical, statistics: atmosphere; forecasts: static fields | CC BY 4.0 | "Contains modified Copernicus Climate Change Service information [year]" |
-| GloFAS v5.0 historical ([10.24381/cds.a4fdd6b9](https://doi.org/10.24381/cds.a4fdd6b9)) and GloFAS forecast ([10.24381/cds.ff1aef77](https://doi.org/10.24381/cds.ff1aef77)), Copernicus Emergency Management Service | river discharge | [CEMS-FLOODS datasets licence](https://ewds.climate.copernicus.eu/licences/cems-floods) | "Contains modified Copernicus Emergency Management Service information [year]" |
 | ECMWF IFS open data ([data.ecmwf.int](https://data.ecmwf.int/forecasts/), read from its copy on AWS) | forecasts: atmosphere | CC BY 4.0 and the [ECMWF terms of use](https://apps.ecmwf.int/datasets/licences/general/) | "based on data and products of the European Centre for Medium-Range Weather Forecasts (ECMWF)" |
 
-Under its licence, the rights in the modifications of the GloFAS data belong to their creators: the river discharge is released under CC BY 4.0 as the rest. The GloFAS forecasts are given for information only: they are not flood warnings. The Copernicus Marine Service licence (clause 2.6) asks that its record-keeping requirement be passed on: users of the ocean and sea-ice variables are asked to keep records of their use of the data, enough to document and trace it, and to make them available to the Copernicus Marine Service on reasonable notice.
+The Copernicus Marine Service licence (clause 2.6) asks that its record-keeping requirement be passed on: users of the ocean and sea-ice variables are asked to keep records of their use of the data, enough to document and trace it, and to make them available to the Copernicus Marine Service on reasonable notice.
 
 The code of this repository (scripts, recipes, documentation) is released under the MIT licence ([LICENSE](LICENSE)); the ONI tutorial, adapted from [Climatematch](https://comptools.climatematch.io/)'s, under its licences, CC BY 4.0 for the text and the BSD 3-Clause License for the code. The animation and the icon in `assets/` show the dataset's values: they are released under CC BY 4.0, as the data, with the credit given under the animation above.
 

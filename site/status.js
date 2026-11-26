@@ -54,16 +54,12 @@ export function resolutionLabel(res) {
   return `${String(res).replace("p", ".")}°`;
 }
 
-// Flag variables name their component: "glo12_forecast" -> "GLO12", "glofas_forecast" ->
-// "GloFAS", "ifs_forecast" -> "IFS".
-const COMPONENTS = { glofas: "GloFAS" };
-
+// Flag variables name their component: "glo12_forecast" -> "GLO12", "ifs_forecast" -> "IFS".
 export function componentLabel(flag) {
-  const name = String(flag).replace(/_forecast$/, "");
-  return COMPONENTS[name] ?? name.toUpperCase();
+  return String(flag).replace(/_forecast$/, "").toUpperCase();
 }
 
-// "IFS 100 %, GloFAS 100 %, GLO12 0 %": the share of the newest run's lead times that are the
+// "IFS 100 %, GLO12 0 %": the share of the newest run's lead times that are the
 // run's own forecast, per component.
 export function flagsSummary(flags) {
   const entries = Object.entries(flags ?? {});

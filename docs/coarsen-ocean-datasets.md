@@ -326,6 +326,8 @@ They are 0 where there is no ice, continuous across the ice edge, and their area
 
 ## 11. River discharge into the ocean
 
+Not published in version 2 (README, Rivers): this is the method of version 2.1.
+
 GloFAS gives the daily discharge (m³/s) of every land cell of its 0.05° grid. Discharge is not
 additive across cells (a river's cell already holds its tributaries): averaging the cells of a
 coarse cell mixes a main channel with hillslopes, a fifth of the main river at 0.25°, and less at
@@ -398,7 +400,7 @@ Findings, measured on 1 Mar and 15 Sep 2013 (`docs/coarsen_analysis.py`, section
 | `thetao`, `so`, `uo`, `vo` | time, depth, lat, lon | averages over the sea part; gaps filled from above |
 | `zos` | time, lat, lon | average over the sea part |
 | `siconc`, `sivol`, `usic`, `vsic` | time, lat, lon | over the sea part (section 10) |
-| `dis24_outlets` | time, lat, lon | river input, metres per day over the cell (section 11) |
+| `dis24_outlets` | time, lat, lon | river input, metres per day over the cell (section 11; not in version 2) |
 | `areacello` | lat, lon (static) | cell area (m²) on GLORYS12's sphere |
 | `volcello` | depth, lat, lon (static) | sea water volume (m³): `seafrac` × layer thickness × `areacello` |
 | `lat_bnds`, `lon_bnds`, `depth_bnds` | coordinate, bnds | CF cell bounds |
@@ -415,7 +417,7 @@ GLORYS12's own (the sum of `e1t` × `e2t` × `e3t` × `mask` over levels 0-48, 1
 2 × 10⁻⁷, at every level to 3 × 10⁻⁷. A sphere is not the Earth: against the WGS84 ellipsoid,
 its cells are 0.45 % larger at the equator and 0.89 % smaller near the poles, whatever the
 radius. Depth bounds are the faces `[0, cumsum(e3t)]` (section 2). River totals use the same
-areas: discharge (m³/s) = `dis24_outlets` × `areacello` / 86400.
+areas: discharge (m³/s) = `dis24_outlets` × `areacello` / 86400 (version 2.1).
 
 ## Measurements
 
