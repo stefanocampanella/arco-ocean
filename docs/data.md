@@ -38,7 +38,7 @@ Values are averages over the sea part of each cell. GLORYS12's sea ice thickness
 | `volcello`                           | Sea water volume of the cell: `seafrac` × layer thickness × `areacello` | float32   | m³    |
 | `lat_bnds`, `lon_bnds`, `depth_bnds` | CF cell bounds (depth: GLORYS12's layer faces)                          | float32   | ° / m |
 
-Ocean and sea ice values exist exactly where `seafrac > 0`. Volumes and heat contents are sums of value × `volcello`; areas use `areacello`. The variables name these weights in `cell_measures`. How these fields are built, and why, is in the [notes on coarsening ocean datasets](coarsen-ocean-datasets.md).
+Ocean and sea ice values exist exactly where `seafrac > 0`. Volumes and heat contents are sums of value × `volcello`; areas use `areacello`. The variables name these weights in `cell_measures`. How these fields are built, and why, is in the [notes on coarsening ocean datasets](notebooks/coarsening.ipynb).
 
 [^1]: Global Ocean Physics Reanalysis. E.U. Copernicus Marine Service Information (CMEMS). Marine Data Store (MDS). DOI: 10.48670/moi-00021 (Accessed on 10-Oct-2025)
 
@@ -86,7 +86,7 @@ Time invariants are read from the same ARCO-ERA5 store at one stamp, 2000-01-01 
 
 ## Rivers
 
-Version 2 has no river discharge. Version 1 published GloFAS's river discharge (v4.0, `dis24`). GloFAS is distributed only by the Early Warning Data Store (EWDS), whose queue held requests for many hours at a time in November 2026. Version 2.1 will bring the rivers back, as the discharge of GloFAS v5.0 at the rivers' mouths (`dis24_outlets`). Its recipes and documentation are at the tag `rivers-last` of this repository, and the method is in the [notes on coarsening ocean datasets](coarsen-ocean-datasets.md).
+Version 2 has no river discharge. Version 1 published GloFAS's river discharge (v4.0, `dis24`). GloFAS is distributed only by the Early Warning Data Store (EWDS), whose queue held requests for many hours at a time in November 2026. Version 2.1 will bring the rivers back, as the discharge of GloFAS v5.0 at the rivers' mouths (`dis24_outlets`). Its recipes and documentation are at the tag `rivers-last` of this repository, and the method is in the [notes on coarsening ocean datasets](notebooks/coarsening.ipynb).
 
 ## Notes on regridding, null values, and masking
 
@@ -96,7 +96,7 @@ All fields are regridded conservatively with `xarray-regrid` ([Schilperoort et a
 - Sea ice: averages over the sea part, no ice as 0 (section above).
 - ERA5: values everywhere. The `land_sea_mask`, renamed `lsm`, is ERA5's fraction of land in each cell, which is not GLORYS12's sea: use `seafrac` for the ocean.
 
-The [notes on coarsening ocean datasets](coarsen-ocean-datasets.md) explain these choices, with measurements at 0.25°, 0.5° and 1°: which coarse cells to call sea, how the water of each layer is kept, how gaps are filled, sea ice, and river discharge (not in version 2).
+The [notes on coarsening ocean datasets](notebooks/coarsening.ipynb) explain these choices, with measurements at 0.25°, 0.5° and 1°: which coarse cells to call sea, how the water of each layer is kept, how gaps are filled, sea ice, and river discharge (not in version 2).
 
 Every block of the download is checked before it is written: a complete daily time axis, the grid convention, ocean and sea ice values exactly where `seafrac > 0` and every other variable everywhere, and a `long_name` and `units` on every variable, no two variables sharing a `long_name`. `configs/validate/historical.toml` checks a whole dataset the same way, given its dates: `arco-make validate --start 1993-01-01 --end 2026-07-01 configs/validate/historical.toml DATASET`.
 

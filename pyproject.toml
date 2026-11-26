@@ -19,6 +19,9 @@ arco-ocean = "arco_ocean.cli:cli"
 [dependency-groups]
 # Tests, lint and types: `uv sync` installs them (the default group).
 dev = [
+    # The coarsening notes run as a test (tests/python/test_notebooks.py); the version of the
+    # notebooks.
+    "marimo==0.25.2",
     "pytest",
     "pytest-cov",
     "ruff",

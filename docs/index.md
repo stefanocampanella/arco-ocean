@@ -65,7 +65,7 @@ newest run's lead times that each component's run gives; the rest comes from lat
 - [Data access](access.md): opening the repositories; the tutorials.
 - [The sources](sources.md): their versions, the limitations their producers document, and how
   they fit together.
-- [Coarsening ocean datasets](coarsen-ocean-datasets.md): the sea fraction, the fills, the sea
+- [Coarsening ocean datasets](notebooks/coarsening.ipynb): the sea fraction, the fills, the sea
   ice and the river outlets (not in version 2).
 - [Producing and extending the dataset](producing.md) and [Forecasts](forecasts.md): the scripts,
   the recipes, the daily collection and its alerts.

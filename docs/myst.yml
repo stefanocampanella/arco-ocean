@@ -21,7 +21,7 @@ project:
     - file: data.md
     - file: access.md
     - file: sources.md
-    - file: coarsen-ocean-datasets.md
+    - file: notebooks/coarsening.ipynb
     - file: producing.md
     - file: forecasts.md
     - title: Notebooks

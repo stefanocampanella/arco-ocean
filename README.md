@@ -19,7 +19,7 @@ on AWS S3, readable without credentials.
 **Everything else is on the site: <https://stefanocampanella.github.io/arco-ocean/>**, written
 from `docs/`:
 [data](docs/data.md), [access](docs/access.md), [sources](docs/sources.md),
-[coarsening](docs/coarsen-ocean-datasets.md), [producing](docs/producing.md),
+[coarsening](notebooks/coarsening.py), [producing](docs/producing.md),
 [forecasts](docs/forecasts.md), [licence](docs/licence.md), [development](docs/development.md).
 
 ## Quick start
