@@ -15,8 +15,8 @@
 # late): it is attempted again (--attempts, --retry-delay), and else caught up the next day.
 # Runs of this script never overlap (a lock in the log directory): a late run makes the next
 # one wait. With --status-url, the collection publishes a heartbeat, a JSON document the
-# ARCO-OCEAN web page reads (scripts/forecast_status.py): its state, each resolution's, the newest
-# run stored, updated every few minutes while it runs.
+# ARCO-OCEAN web page reads (`arco-ocean status`, src/arco_ocean/status.py): its state, each
+# resolution's, the newest run stored, updated every few minutes while it runs.
 
 usage() {
     cat <<EOF
@@ -51,7 +51,8 @@ DESCRIPTION
     Other options (--image, --virtual-env, --env-file, --bind, --config-dir, --log-level) go to
     scripts/download.sh, as given. Outputs are DATA_ROOT/forecast/res=<res>: --data-root ROOT
     gives it, else scripts/settings.sh (resolved once, and given to every download); the
-    heartbeat reads them there.
+    heartbeat reads them there. The heartbeat is "arco-ocean status", run with uv in this
+    checkout's environment (ARCO_OCEAN_CLI names another arco-ocean command).
 
     Examples:
         $0 --start 2026-07-01                 # the first time: backfill to today's run
@@ -72,13 +73,9 @@ STATUS_URL=""
 HEARTBEAT=300
 STALE_AFTER=30
 MISSING_AFTER=2
-# The image of the arco-make version pinned in pyproject.toml (tests/test_image.py).
-IMAGE="oras://ghcr.io/stefanocampanella/arco-make:v0.2.0"
-VENV=""
 ENV_FILE="scripts/.env"
 ROOT_OPTION=""
 ROOT_GIVEN=false
-BINDS=()
 PASS=()
 
 while [[ $# -gt 0 ]]; do
@@ -105,21 +102,15 @@ while [[ $# -gt 0 ]]; do
         --missing-after=*) MISSING_AFTER="${1#*=}"; shift ;;
         --stale-after) STALE_AFTER="$2"; shift 2 ;;
         --stale-after=*) STALE_AFTER="${1#*=}"; shift ;;
-        # Given to download.sh; the heartbeat runs in the same environment, with the same paths.
-        --image) IMAGE="$2"; PASS+=("$1" "$2"); shift 2 ;;
-        --image=*) IMAGE="${1#*=}"; PASS+=("$1"); shift ;;
-        --virtual-env) VENV="$2"; PASS+=("$1" "$2"); shift 2 ;;
-        --virtual-env=*) VENV="${1#*=}"; PASS+=("$1"); shift ;;
+        # Given to download.sh (the environment file is read here too, for DATA_ROOT).
         --env-file) ENV_FILE="$2"; PASS+=("$1" "$2"); shift 2 ;;
         --env-file=*) ENV_FILE="${1#*=}"; PASS+=("$1"); shift ;;
-        --bind) BINDS+=("$2"); PASS+=("$1" "$2"); shift 2 ;;
-        --bind=*) BINDS+=("${1#*=}"); PASS+=("$1"); shift ;;
+        --image|--virtual-env|--bind|--config-dir|--log-level)
+            PASS+=("$1" "$2"); shift 2 ;;
+        --image=*|--virtual-env=*|--bind=*|--config-dir=*|--log-level=*)
+            PASS+=("$1"); shift ;;
         --data-root) ROOT_OPTION="$2"; ROOT_GIVEN=true; shift 2 ;;
         --data-root=*) ROOT_OPTION="${1#*=}"; ROOT_GIVEN=true; shift ;;
-        --config-dir|--log-level)
-            PASS+=("$1" "$2"); shift 2 ;;
-        --config-dir=*|--log-level=*)
-            PASS+=("$1"); shift ;;
         -h|--help) usage; exit 0 ;;
         *) echo "Error: unrecognized argument '$1'." >&2; usage >&2; exit 1 ;;
     esac
@@ -161,29 +152,24 @@ if ! flock -n 9; then
     flock 9
 fi
 
-# The heartbeat (--status-url): scripts/forecast_status.py, run by the Python of the arco-make
-# that downloads, reads the repositories where scripts/download.sh writes them.
+# The heartbeat (--status-url): `arco-ocean status`, in this checkout's environment (uv; its
+# arco-make is the release the image has), reads the repositories where scripts/download.sh
+# writes them. ARCO_OCEAN_CLI names another `arco-ocean` command (the tests' environment).
 STATUS_FILE="${LOG_DIR}/status.json"
 HEARTBEAT_PID=""
 ENDED=false
-if [[ -n "${STATUS_URL}" ]]; then
-    if [[ -n "${VENV}" ]]; then
-        STATUS_PY=("${VENV}/bin/python")
-    else
-        APPTAINER_FLAGS=()
-        for BIND in "${BINDS[@]+"${BINDS[@]}"}"; do
-            APPTAINER_FLAGS+=(--bind "${BIND}")
-        done
-        STATUS_PY=(apptainer exec "${APPTAINER_FLAGS[@]+"${APPTAINER_FLAGS[@]}"}" "${IMAGE}" python)
-    fi
+if [[ -n "${ARCO_OCEAN_CLI:-}" ]]; then
+    ARCO_OCEAN=("${ARCO_OCEAN_CLI}")
+else
+    ARCO_OCEAN=(uv run --quiet --frozen --no-default-groups --project "${SCRIPT_DIR}/.." arco-ocean)
 fi
 
 # Update the heartbeat (no-op without --status-url). It never stops the collection: a failure is
 # logged in the log directory's status.log.
 status() {
     [[ -n "${STATUS_URL}" ]] || return 0
-    if ! "${STATUS_PY[@]}" -I "${SCRIPT_DIR}/forecast_status.py" --state-file "${STATUS_FILE}" \
-        --publish "${STATUS_URL}" "$@" >> "${LOG_DIR}/status.log" 2>&1; then
+    if ! "${ARCO_OCEAN[@]}" status --state-file "${STATUS_FILE}" --publish "${STATUS_URL}" "$@" \
+        >> "${LOG_DIR}/status.log" 2>&1; then
         echo "Warning: the heartbeat ($1) could not be published: see ${LOG_DIR}/status.log." >&2
     fi
 }

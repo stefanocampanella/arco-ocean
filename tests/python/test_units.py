@@ -12,7 +12,7 @@ import sys
 
 import pytest
 
-ROOT = pathlib.Path(__file__).parents[1]
+ROOT = pathlib.Path(__file__).parents[2]
 UNITS = sorted((ROOT / "systemd").iterdir())
 
 # Records its arguments, one call per line; gh answers FAKE_STATE to the workflow's state.

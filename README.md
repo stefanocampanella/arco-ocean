@@ -188,6 +188,9 @@ them at every resolution: the first time with `--start`, from the end of the his
 then every day, adding the runs after the last stored one (a missed day is caught up).
 
 ```bash
+# The heartbeat's environment (the package, src/arco_ocean), after each pull: forecast.sh runs
+# `arco-ocean status` with uv, which would otherwise install it at the collection's first beat.
+uv sync --frozen --no-default-groups
 # The first time: every run from the end of the historical dataset to today's, with the
 # heartbeat for the web page (DATA_ROOT/forecast/res=<res>).
 scripts/forecast.sh --bind /data --status-url s3://ogs-arco-ocean/status/forecast.json \
@@ -240,8 +243,9 @@ false where they come from later releases or are missing (a source without the r
 With `--status-url`, the collection publishes a heartbeat, `status/forecast.json` in the bucket,
 which the [web page](#web-page) reads: the collection's state (`running`, `finished`, `aborted`),
 each resolution's (`pending`, `downloading`, `finished`, `not_published`, `failed`), and each
-repository's newest run, number of runs and flags. `scripts/forecast_status.py` writes it, with the
-Python and the AWS profile of the arco-make that downloads (`--virtual-env`, or the image); it is
+repository's newest run, number of runs and flags. `arco-ocean status` (the package in
+`src/arco_ocean`, run with uv in the checkout's environment, `arco-ocean heartbeat-schema` prints
+the document's schema) writes it, with the AWS profile of arco-make's settings; it is
 updated at each step and every 5 minutes while the collection runs (`--heartbeat`). A collection
 that fails, or is stopped by a signal it can trap, ends its heartbeat as aborted; one killed
 outright (or whose machine goes down) stops beating, and the page calls it stale after three
@@ -279,8 +283,8 @@ the workflow again in the Actions tab.
 ### Checks
 
 `uvx pre-commit run --all-files` runs the checks made before each commit: TOML and YAML syntax,
-ruff, ShellCheck, REUSE and a secret scan. `uv run --frozen --only-group notes pytest tests` loads
-every recipe with the models of the pinned arco-make (an unknown key, step or argument fails),
+ruff, ty, ShellCheck, REUSE and a secret scan. `uv run --frozen pytest` (tests/python, with a
+coverage of the package of at least 80 % in CI) loads every recipe with the models of the pinned arco-make (an unknown key, step or argument fails),
 runs the examples of the coarsening notes, and tests the forecast heartbeat and the systemd units
 (their installer and the watchdog's keepalive, with stand-ins for `systemctl` and `gh`; the units
 checked by `systemd-analyze verify`); the pre-commit checks

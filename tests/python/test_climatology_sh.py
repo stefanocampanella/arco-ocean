@@ -9,7 +9,7 @@ import subprocess
 
 import pytest
 
-SCRIPTS = pathlib.Path(__file__).parents[1] / "scripts"
+SCRIPTS = pathlib.Path(__file__).parents[2] / "scripts"
 
 # Records its arguments.
 FAKE_ARCO_MAKE = """#!/usr/bin/env bash

@@ -1,9 +1,8 @@
 # SPDX-FileCopyrightText: 2026 Stefano Campanella
 # SPDX-License-Identifier: MIT
-"""The forecast collection's heartbeat (scripts/forecast_status.py), on a local forecast
-repository and a local published file."""
+"""The forecast collection's heartbeat (`arco-ocean status`), on a local forecast repository and
+a local published file."""
 
-import importlib.util
 import json
 import os
 import pathlib
@@ -15,12 +14,12 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
+from click.testing import CliRunner
 
-SCRIPT = pathlib.Path(__file__).parents[1] / "scripts" / "forecast_status.py"
-spec = importlib.util.spec_from_file_location("forecast_status", SCRIPT)
-assert spec is not None and spec.loader is not None
-forecast_status = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(forecast_status)
+from arco_ocean import status
+from arco_ocean.cli import cli
+
+ROOT = pathlib.Path(__file__).parents[2]
 
 
 def forecast_repository(path: pathlib.Path, runs: list[str], glo12: list[bool]) -> None:
@@ -46,9 +45,20 @@ def forecast_repository(path: pathlib.Path, runs: list[str], glo12: list[bool]) 
   session.commit("forecast")
 
 
+def invoke(state: pathlib.Path, *args: str, published: pathlib.Path | None = None):
+  options = ["--state-file", str(state)]
+  if published is not None:
+    options += ["--publish", str(published)]
+  return CliRunner().invoke(cli, ["status", *options, *args])
+
+
 def run(state: pathlib.Path, published: pathlib.Path, *args: str) -> dict:
-  assert forecast_status.main(["--state-file", str(state), "--publish", str(published), *args]) == 0
-  return json.loads(published.read_text())
+  result = invoke(state, *args, published=published)
+  assert result.exit_code == 0, result.output
+  document = json.loads(published.read_text())
+  # Every published document is a valid heartbeat.
+  status.Heartbeat.model_validate(document)
+  return document
 
 
 @pytest.fixture
@@ -71,6 +81,8 @@ def test_a_collection_from_start_to_end(tmp_path, files) -> None:
   assert document["target_run"] == "2026-11-24"
   assert document["heartbeat_seconds"] == 300
   assert document["stale_after_hours"] == 30.0
+  # Times in UTC, to the second, as the page reads them.
+  assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", document["started_at"])
   # Local paths are not published; the state file keeps them.
   assert "repositories" not in document
   assert str(repo) not in published.read_text()
@@ -142,7 +154,7 @@ def test_a_new_collection_keeps_the_newest_runs_known(tmp_path, files, monkeypat
   def unreadable(path: str) -> dict:
     raise OSError(f"cannot reach {path}")
 
-  monkeypatch.setattr(forecast_status, "repository_summary", unreadable)
+  monkeypatch.setattr(status, "repository_summary", unreadable)
   document = run(state, published, "start", "--target-run", "2026-11-24", "--repo", f"1p0={repo}")
   entry = document["resolutions"][0]
   assert entry["latest_run"] == "2026-11-23"
@@ -156,6 +168,7 @@ def test_the_settings_apply_before_the_repositories_are_read(tmp_path, files, mo
   state, published = files
   rc = tmp_path / "arcomakerc"
   rc.write_text("AWS_PROFILE=probe-profile\n")
+  rc.chmod(0o600)
   monkeypatch.setenv("ARCOMAKE_RC", str(rc))
   monkeypatch.delenv("AWS_PROFILE", raising=False)
   monkeypatch.delenv("AWS_DEFAULT_PROFILE", raising=False)
@@ -165,18 +178,34 @@ def test_the_settings_apply_before_the_repositories_are_read(tmp_path, files, mo
     seen.append(os.environ.get("AWS_PROFILE"))
     return {"latest_run": None, "runs": None, "flags": {}}
 
-  monkeypatch.setattr(forecast_status, "repository_summary", summary)
+  monkeypatch.setattr(status, "repository_summary", summary)
   run(state, published, "start", "--target-run", "2026-11-24", "--repo", "1p0=s3://bucket/x")
   assert seen == ["probe-profile"]
 
 
 def test_steps_need_a_started_collection(files) -> None:
   state, published = files
-  with pytest.raises(SystemExit, match="no collection started"):
-    forecast_status.main(["--state-file", str(state), "beat"])
+  result = invoke(state, "beat")
+  assert result.exit_code == 1 and "no collection started" in result.output
   run(state, published, "start", "--target-run", "2026-11-24", "--repo", "1p0=/nowhere")
-  with pytest.raises(SystemExit, match="unknown resolution"):
-    forecast_status.main(["--state-file", str(state), "res", "0p25", "finished"])
+  result = invoke(state, "res", "0p25", "finished")
+  assert result.exit_code == 1 and "unknown resolution" in result.output
+
+
+@pytest.mark.parametrize(
+  "args",
+  [
+    ["start", "--target-run", "2026-11-24", "--repo", "1p0"],
+    ["start", "--target-run", "24 Nov 2026"],
+    ["res", "1p0", "done"],
+    ["end", "running"],
+  ],
+)
+def test_wrong_arguments_are_refused(files, args) -> None:
+  state, _ = files
+  result = invoke(state, *args)
+  assert result.exit_code == 2, result.output
+  assert not state.exists()
 
 
 def test_a_resolution_waits_from_its_first_collection_not_published(files) -> None:
@@ -196,14 +225,51 @@ def test_a_resolution_waits_from_its_first_collection_not_published(files) -> No
   assert collection("2026-11-25", "finished")["waiting_since"] is None
 
 
+def test_a_state_file_of_the_script_before_is_read(files) -> None:
+  # scripts/forecast_status.py wrote the same document (until 26 Nov 2026): a collection it
+  # started goes on with the package.
+  state, published = files
+  state.parent.mkdir(parents=True)
+  state.write_text(
+    json.dumps(
+      {
+        "schema": 1, "state": "running", "detail": None,
+        "started_at": "2026-11-25T12:00:03Z", "updated_at": "2026-11-25T12:05:03Z",
+        "ended_at": None, "heartbeat_seconds": 300, "stale_after_hours": 30.0,
+        "missing_after_days": 2.0, "target_run": "2026-11-25",
+        "resolutions": [
+          {
+            "res": "1p0", "state": "downloading", "started_at": "2026-11-25T12:00:04Z",
+            "ended_at": None, "latest_run": "2026-11-24", "runs": 3,
+            "flags": {"ifs_forecast": 1.0}, "waiting_since": None, "error": None,
+          }
+        ],
+        "repositories": {"1p0": "/nowhere"},
+      }
+    )
+  )  # fmt: skip
+  document = run(state, published, "end", "finished")
+  assert document["started_at"] == "2026-11-25T12:00:03Z"
+  assert document["resolutions"][0]["latest_run"] == "2026-11-24"
+
+
+def test_the_schema_describes_the_published_document() -> None:
+  result = CliRunner().invoke(cli, ["heartbeat-schema"])
+  assert result.exit_code == 0, result.output
+  schema = json.loads(result.output)
+  assert "schema" in schema["properties"] and "repositories" not in schema["properties"]
+  assert schema["$defs"]["Resolution"]["properties"]["state"]["enum"] == [
+    "pending", "downloading", "finished", "not_published", "failed",
+  ]  # fmt: skip
+
+
 def test_the_published_missing_after_is_the_recipes(files) -> None:
   # The page judges lags and waits by it: forecast.sh's default must be the recipes' value.
-  root = pathlib.Path(__file__).parents[1]
-  script = (root / "scripts" / "forecast.sh").read_text()
+  script = (ROOT / "scripts" / "forecast.sh").read_text()
   match = re.search(r"^MISSING_AFTER=([0-9.]+)$", script, re.MULTILINE)
   assert match is not None
   default = float(match.group(1))
-  recipes = sorted((root / "configs" / "download").glob("forecast_res-*.toml"))
+  recipes = sorted((ROOT / "configs" / "download").glob("forecast_res-*.toml"))
   assert recipes
   for recipe in recipes:
     value = tomllib.loads(recipe.read_text())["forecast"]["missing_after"]

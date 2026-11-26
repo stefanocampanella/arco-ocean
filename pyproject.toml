@@ -1,9 +1,32 @@
 [project]
 name = "arco-ocean"
-version = "1.1"
-description = "Documentation and tutorials for the ARCO-OCEAN dataset"
+version = "2.0.0"
+description = "ARCO-OCEAN's tools: the forecast collection's heartbeat, the recipes' checks"
+readme = "README.md"
+license = "MIT"
 requires-python = ">=3.13"
 dependencies = [
+    # The release whose image the scripts run (tests/python/test_image.py). It brings xarray,
+    # icechunk and botocore, which read the forecast repositories and publish the heartbeat.
+    "arcomake @ git+https://github.com/stefanocampanella/arco-make.git@v0.2.0",
+    "click",
+    "pydantic>=2.11",
+]
+
+[project.scripts]
+arco-ocean = "arco_ocean.cli:cli"
+
+[dependency-groups]
+# Tests, lint and types: `uv sync` installs them (the default group).
+dev = [
+    "pytest",
+    "pytest-cov",
+    "ruff",
+    "ty",
+]
+# The tutorials (tutorials/): `uv run --group notebooks marimo edit tutorials/oni.py`, or in their
+# own environment from their inline metadata (`uvx marimo edit --sandbox tutorials/oni.py`).
+notebooks = [
     "xarray>=2025.1.1",
     "numpy",
     "cftime",
@@ -27,14 +50,9 @@ dependencies = [
     "tqdm>=4.67.3",
 ]
 
-[dependency-groups]
-# The coarsening notes' doctests and measurements (docs/) and the recipes' validation (tests/):
-# `uv run --only-group notes ...`. arco-make v0.2.0, the release whose image the scripts run
-# (tests/test_image.py).
-notes = [
-    "arcomake[live] @ git+https://github.com/stefanocampanella/arco-make.git@v0.2.0",
-    "pytest",
-]
+[build-system]
+requires = ["uv_build >= 0.11.7"]
+build-backend = "uv_build"
 
 # The style of arco-make: 2-space indentation, 100 columns, the same rules.
 [tool.ruff]
@@ -50,8 +68,31 @@ exclude = ["tutorials/*.py"]
 select = ["E", "F", "I", "B", "UP", "SIM"]
 ignore = ["E501", "B028"]
 
+[tool.ruff.lint.isort]
+known-first-party = ["arco_ocean"]
+
 [tool.ruff.lint.per-file-ignores]
 # marimo notebooks: a cell shows its last expression (B018); names come as cell arguments, so ruff
 # reads the strings of `Literal[...]` as names (F821; `marimo check` checks the cells' names); the
 # tutorial's code is kept as adapted (F841).
 "tutorials/*.py" = ["B018", "F821", "F841"]
+
+[tool.ty.environment]
+python-version = "3.13"
+
+[tool.ty.src]
+include = ["src/arco_ocean/**/*.py"]
+
+[tool.ty.rules]
+# Every rule is an error, as in arco-make: the type checker gates commits (pre-commit) and CI.
+all = "error"
+
+[tool.pytest.ini_options]
+testpaths = ["tests/python"]
+# Tests marked `live` read the real sources: skipped unless pytest gets `--live`
+# (tests/python/conftest.py).
+addopts = ["-ra", "--strict-markers"]
+xfail_strict = true
+
+[tool.coverage.run]
+source = ["arco_ocean"]

@@ -15,7 +15,7 @@ from arcomake.climatology import ClimatologyConfig
 from arcomake.download import DownloadConfig
 from arcomake.validate import ValidateConfig
 
-CONFIGS = pathlib.Path(__file__).parent.parent / "configs"
+CONFIGS = pathlib.Path(__file__).parents[2] / "configs"
 # The model of each recipe folder: the command that reads its recipes.
 SCHEMAS = {"download": DownloadConfig, "climatology": ClimatologyConfig, "validate": ValidateConfig}
 RECIPES = sorted(CONFIGS.rglob("*.toml"))

@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Stefano Campanella
 # SPDX-License-Identifier: MIT
 # The pre-commit checks (.pre-commit-config.yaml): TOML and YAML syntax, ruff, ShellCheck, REUSE,
-# secrets. The recipes are validated by the tests (notes.yml).
+# secrets. Lint, types and tests of the package: ci.yml.
 name: checks
 
 on:

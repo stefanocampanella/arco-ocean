@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Stefano Campanella
 // SPDX-License-Identifier: MIT
 //
-// The state of the forecast collection, from its heartbeat (scripts/forecast_status.py writes
-// it; its docstring describes the document). Pure functions, tested by status.test.mjs.
+// The state of the forecast collection, from its heartbeat (`arco-ocean status` writes it;
+// `arco-ocean heartbeat-schema` prints the document's schema). Pure functions, tested by status.test.mjs.
 
 export const DEFAULT_STATUS_URL =
   "https://ogs-arco-ocean.s3.eu-south-1.amazonaws.com/status/forecast.json";
