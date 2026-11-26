@@ -78,6 +78,10 @@ site() {
         run grep -c -e "marimo@${version} " -e "nodejs-wheel==${version} " "${REPO}/.pre-commit-config.yaml"
         assert_output 1
     done
+    # The tests run the notebooks with the dev group's marimo.
+    version="$(sed -n 's/^MARIMO="marimo==\(.*\)"$/\1/p' "${REPO}/scripts/site.sh")"
+    run grep -c "\"marimo==${version}\"" "${REPO}/pyproject.toml"
+    assert_output 1
 }
 
 @test "start previews, without --strict" {

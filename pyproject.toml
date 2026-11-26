@@ -62,6 +62,8 @@ build-backend = "uv_build"
 target-version = "py313"
 line-length = 100
 indent-width = 2
+# The bats libraries (git submodules) are theirs.
+extend-exclude = ["tests/bats/helpers"]
 
 [tool.ruff.format]
 # marimo writes its notebooks in its own form (4-space indentation) whenever they are saved.
@@ -75,10 +77,11 @@ ignore = ["E501", "B028"]
 known-first-party = ["arco_ocean"]
 
 [tool.ruff.lint.per-file-ignores]
-# marimo notebooks: a cell shows its last expression (B018); names come as cell arguments, so ruff
-# reads the strings of `Literal[...]` as names (F821; `marimo check` checks the cells' names); the
-# tutorial's code is kept as adapted (F841).
-"notebooks/*.py" = ["B018", "F821", "F841"]
+# marimo notebooks: a cell shows its last expression (B018). The ONI tutorial: ruff reads the
+# strings of its `Literal[...]` as names (F821; `marimo check` checks the cells' names), and its
+# code is kept as adapted (F841); in the others, an undefined name is an error.
+"notebooks/*.py" = ["B018"]
+"notebooks/oni.py" = ["B018", "F821", "F841"]
 
 [tool.ty.environment]
 python-version = "3.13"
