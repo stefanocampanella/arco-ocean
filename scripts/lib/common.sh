@@ -233,6 +233,104 @@ heartbeat_stop() {
     fi
 }
 
+# --- One-off runs: their progress and alerts (download.sh, climatology.sh) ---------------------
+#
+# With --status-url, a run publishes its progress (`arco-ocean progress`, in this checkout's
+# environment: a download's read from its repository, the statistics' state only) when it starts,
+# every --heartbeat seconds and when it ends; with --alert, its end is reported on GitHub
+# (scripts/alert.sh, in the background: an issue when it fails, closed when a later run of the
+# same recipe succeeds). Its state file is LOG_DIR/progress_RECIPE.json, kept with --alert alone
+# too (the issue shows its summary). Neither ever stops the run: failures are logged in
+# LOG_DIR/progress.log and LOG_DIR/alert.log. A run killed outright (SIGKILL, the machine down)
+# reports nothing: the page calls it stale after three missed beats.
+
+progress_defaults() {
+    STATUS_URL=""
+    HEARTBEAT=300
+    ALERT=false
+}
+
+# Parse one option of the progress, if it is one (SHIFT_BY its words, else 0).
+progress_option() {
+    SHIFT_BY=0
+    case "$1" in
+        --status-url|--status-url=*) option_value "$@"; STATUS_URL="${VALUE}" ;;
+        --heartbeat|--heartbeat=*) option_value "$@"; HEARTBEAT="${VALUE}" ;;
+        --alert) ALERT=true; SHIFT_BY=1 ;;
+    esac
+}
+
+progress_usage() {
+    cat <<EOF
+        --status-url URL        Publish the run's progress there, for the web page: an s3:// URL
+                                (through arco-make's AWS profile) or a local path (default: none).
+                                The bucket's: s3://ogs-arco-ocean/status/$1/res=<res>.json.
+        --heartbeat SECONDS     Between updates of the progress (default: 300).
+        --alert                 Report the run's end on GitHub (scripts/alert.sh, its token): an
+                                issue when it fails, closed when a later run of it succeeds.
+EOF
+}
+
+# Run `arco-ocean progress` on the run's state file (publishing it with --status-url).
+progress() {
+    local publish=()
+    if [[ -n "${STATUS_URL}" ]]; then publish=(--publish "${STATUS_URL}"); fi
+    if ! "${ARCO_OCEAN[@]}" progress --state-file "${PROGRESS_FILE}" \
+        "${publish[@]+"${publish[@]}"}" "$@" >> "${LOG_DIR}/progress.log" 2>&1; then
+        echo "Warning: the progress ($1) could not be updated: see ${LOG_DIR}/progress.log." >&2
+    fi
+}
+
+# The run's end (its EXIT trap): the progress ended, and reported with --alert.
+# shellcheck disable=SC2329  # run by the EXIT trap of progress_run
+progress_exit() {
+    local code=$? event=failed
+    heartbeat_stop
+    if [[ ${code} -eq 0 ]]; then
+        event=finished
+        progress end finished
+    elif [[ ${code} -eq ${NOT_PUBLISHED} ]]; then
+        progress end failed --detail "Stopped at a forecast run not published yet: the runs before are stored."
+    else
+        progress end failed --detail "Stopped (exit status ${code}): ${PROGRESS_AGAIN}"
+    fi
+    if [[ "${ALERT}" == true ]]; then
+        # Detached: it tries again for up to half an hour when GitHub cannot be reached.
+        setsid bash "${CHECKOUT}/scripts/alert.sh" --kind "${PROGRESS_KIND}" \
+            --name "${PROGRESS_NAME}" --state-file "${PROGRESS_FILE}" --exit-status "${code}" \
+            "${event}" >> "${LOG_DIR}/alert.log" 2>&1 < /dev/null &
+    fi
+}
+
+# progress_run KIND NAME REPO [START OPTIONS...]: the run of KIND (download, statistics) of the
+# recipe NAME into REPO starts: its progress, its beat, its EXIT trap (after open_log). Nothing
+# without --status-url nor --alert. START OPTIONS go to `arco-ocean progress start` (--start,
+# --end).
+progress_run() {
+    PROGRESS_KIND=$1
+    PROGRESS_NAME=$2
+    local repository=$3
+    shift 3
+    PROGRESS_FILE="${LOG_DIR}/progress_${PROGRESS_NAME}.json"
+    HEARTBEAT_PID=""
+    if [[ -z "${STATUS_URL}" && "${ALERT}" == false ]]; then return 0; fi
+    if [[ "${PROGRESS_KIND}" == download ]]; then
+        PROGRESS_AGAIN="rerun it with --resume."
+    else
+        PROGRESS_AGAIN="rerun it."
+    fi
+    arco_ocean_command
+    # Before the start: a run stopped while it starts ends its progress too.
+    trap progress_exit EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    progress start --kind "${PROGRESS_KIND}" --name "${PROGRESS_NAME}" --repo "${repository}" \
+        --heartbeat-seconds "${HEARTBEAT}" "$@"
+    if [[ -n "${STATUS_URL}" ]]; then
+        heartbeat_start "${HEARTBEAT}" progress beat
+    fi
+}
+
 # A GitHub repository's OWNER/REPO, else exit naming the option. Usage: github_repo OPTION VALUE.
 github_repo() {
     [[ "$2" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die "$1 takes OWNER/REPO (got '$2')."

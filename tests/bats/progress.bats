@@ -2,9 +2,10 @@
 # SPDX-FileCopyrightText: 2026 Stefano Campanella
 # SPDX-License-Identifier: MIT
 #
-# scripts/download.sh --status-url: the progress it publishes (the package's `arco-ocean
-# progress`, really run), read from the blocks a stand-in arco-make commits into the output
-# repository as arco-make does (fixtures/blocks.py).
+# scripts/download.sh and climatology.sh --status-url and --alert: the progress they publish (the
+# package's `arco-ocean progress`, really run), read from the blocks a stand-in arco-make commits
+# into the output repository as arco-make does (fixtures/blocks.py), and the reports they hand to
+# a stand-in alert.sh.
 
 setup() {
     load common
@@ -132,11 +133,11 @@ download() {
 }
 
 @test "a progress that cannot be published does not stop the download" {
-    PUBLISHED="${PROJECT}/www"
-    mkdir -p "${PUBLISHED}/historical.json"
-    PUBLISHED="${PUBLISHED}/historical.json" download
+    # A directory where the document goes: it cannot be written.
+    mkdir -p "${PUBLISHED}"
+    download
     assert_success
-    assert_output --partial "Warning: the progress (start) could not be published"
+    assert_output --partial "Warning: the progress (start) could not be updated"
     assert_output --partial "Download of historical_res-1p0 finished"
 }
 
@@ -153,4 +154,67 @@ download() {
     download --heartbeat 0
     assert_failure 1
     assert_output --partial "--heartbeat"
+}
+
+# The scripts copied into the project with a stand-in alert.sh (the real one would reach GitHub),
+# which records its arguments.
+with_alert_stub() {
+    copy_scripts download.sh climatology.sh
+    stub_at "${PROJECT}/scripts/alert.sh"
+}
+
+# Wait for the stand-in alert.sh's call ending with EVENT (it runs in the background).
+alerted() {
+    for _ in $(seq 100); do
+        if grep -q "^alert.sh .* $1$" "${CALLS}" 2>/dev/null; then return 0; fi
+        sleep 0.1
+    done
+    calls
+    return 1
+}
+
+@test "--alert reports a failed download, then its recovery" {
+    with_alert_stub
+    local state="${PROJECT}/logs/download/progress_historical_res-1p0.json"
+    FAKE_CODE=1 run bash "${PROJECT}/scripts/download.sh" --project-dir "${PROJECT}" \
+        --virtual-env "${PROJECT}/venv" --env-file "" --alert --start 1993-01-01 \
+        --end 1993-06-01 --attempts 1 historical_res-1p0
+    assert_failure 1
+    alerted failed
+    run grep "^alert.sh" "${CALLS}"
+    assert_output "alert.sh --kind download --name historical_res-1p0 --state-file ${state} --exit-status 1 failed"
+    # The state is kept for the issue's summary, though nothing is published.
+    assert_file_exists "${state}"
+    assert_file_not_exists "${PUBLISHED}"
+    rm "${CALLS}"
+    run bash "${PROJECT}/scripts/download.sh" --project-dir "${PROJECT}" \
+        --virtual-env "${PROJECT}/venv" --env-file "" --alert --start 1993-01-01 \
+        --end 1993-06-01 --attempts 1 historical_res-1p0
+    assert_success
+    alerted finished
+    run grep "^alert.sh" "${CALLS}"
+    assert_output --partial " --exit-status 0 finished"
+}
+
+@test "the statistics publish their state, and --alert reports a failure" {
+    with_alert_stub
+    mkdir -p "${PROJECT}/configs/climatology"
+    touch "${PROJECT}/configs/climatology/historical_res-1p0.toml"
+    local PUBLISHED="${PROJECT}/www/statistics.json"
+    # The computation writes its output in one commit (an empty run here: the repository made).
+    FAKE_BLOCKS=" " run bash "${PROJECT}/scripts/climatology.sh" --project-dir "${PROJECT}" \
+        --virtual-env "${PROJECT}/venv" --env-file "" --status-url "${PUBLISHED}" \
+        historical_res-1p0
+    assert_success
+    assert_equal "$(published 'd["kind"], d["state"], d["start"], d["end"], d["done_until"]')" \
+        "('statistics', 'finished', None, None, None)"
+    assert_equal "$(published 'd["last_commit_at"] is not None')" True
+    FAKE_CODE=1 run bash "${PROJECT}/scripts/climatology.sh" --project-dir "${PROJECT}" \
+        --virtual-env "${PROJECT}/venv" --env-file "" --status-url "${PUBLISHED}" --alert \
+        historical_res-1p0
+    assert_failure 1
+    assert_equal "$(published 'd["state"], "rerun it." in d["detail"]')" "('failed', True)"
+    alerted failed
+    run grep "^alert.sh" "${CALLS}"
+    assert_output --regexp "^alert.sh --kind statistics --name historical_res-1p0 --state-file .*/logs/climatology/progress_historical_res-1p0.json --exit-status 1 failed$"
 }

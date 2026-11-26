@@ -17,9 +17,10 @@
 # (the recipe's [retries]).
 #
 # With --status-url, the download publishes its progress, a JSON document the ARCO-OCEAN web page
-# shows (for the historical download, run once): "running" with the end of the newest block
+# shows (for the historical downloads, run once): "running" with the end of the newest block
 # committed, read from the repository at the start, every --heartbeat seconds and at the end, then
-# "finished" or "failed". A download killed outright stops updating it: the page calls it stale.
+# "finished" or "failed"; with --alert, a failure opens a GitHub issue (lib/common.sh,
+# progress_run). A download killed outright stops updating it: the page calls it stale.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/common.sh
@@ -51,11 +52,7 @@ DESCRIPTION
         --resume                Continue a run that failed earlier (arco-make --resume).
         --attempts N            Runs in all, the later ones resuming (default: 3).
         --retry-delay SECONDS   Wait between runs (default: 60).
-        --status-url URL        Publish the progress there: an s3:// URL (through arco-make's
-                                AWS profile) or a local path (default: none). It is
-                                "arco-ocean progress", run with uv in this checkout; its state
-                                file is LOG_DIR/progress_RECIPE.json.
-        --heartbeat SECONDS     Between updates of the progress (default: 300).
+$(progress_usage historical)
 $(common_usage download)
         -h, --help              Show this help.
 
@@ -66,7 +63,7 @@ $(common_usage download)
         $0 --start 1993-01-01 --end 2026-07-01 historical_res-0p25
         $0 --extend --end 2026-08-01 historical_res-0p25
         $0 --start 1993-01-01 --end 2026-07-01 \\
-            --status-url s3://BUCKET/status/historical/res=0p25.json historical_res-0p25
+            --status-url s3://BUCKET/status/historical/res=0p25.json --alert historical_res-0p25
 EOF
 }
 
@@ -79,12 +76,13 @@ RESUME=false
 EXTEND=false
 ATTEMPTS=3
 RETRY_DELAY=60
-STATUS_URL=""
-HEARTBEAT=300
+progress_defaults
 POSITIONAL_ARGS=()
 
 while [[ $# -gt 0 ]]; do
     common_option "$@"
+    if [[ ${SHIFT_BY} -gt 0 ]]; then shift "${SHIFT_BY}"; continue; fi
+    progress_option "$@"
     if [[ ${SHIFT_BY} -gt 0 ]]; then shift "${SHIFT_BY}"; continue; fi
     case "$1" in
         --output|--output=*) option_value "$@"; OUTPUT="${VALUE}"; shift "${SHIFT_BY}" ;;
@@ -95,8 +93,6 @@ while [[ $# -gt 0 ]]; do
         --resume) RESUME=true; shift ;;
         --attempts|--attempts=*) option_value "$@"; ATTEMPTS="${VALUE}"; shift "${SHIFT_BY}" ;;
         --retry-delay|--retry-delay=*) option_value "$@"; RETRY_DELAY="${VALUE}"; shift "${SHIFT_BY}" ;;
-        --status-url|--status-url=*) option_value "$@"; STATUS_URL="${VALUE}"; shift "${SHIFT_BY}" ;;
-        --heartbeat|--heartbeat=*) option_value "$@"; HEARTBEAT="${VALUE}"; shift "${SHIFT_BY}" ;;
         -h|--help) usage; exit 0 ;;
         --) shift; POSITIONAL_ARGS+=("$@"); break ;;
         -*) echo "Error: unrecognized option '$1'." >&2; usage >&2; exit 1 ;;
@@ -142,46 +138,14 @@ arco_make_command
 
 echo "Download of ${NAME} to ${OUTPUT}, log: ${LOG_FILE} (started $(date -u), PID $$, host $(hostname))"
 
-# The progress (--status-url): `arco-ocean progress`, in this checkout's environment, reads the
-# output repository. It never stops the download: a failure is logged in LOG_DIR/progress.log.
-PROGRESS_FILE="${LOG_DIR}/progress_${NAME}.json"
-HEARTBEAT_PID=""
-progress() {
-    [[ -n "${STATUS_URL}" ]] || return 0
-    if ! "${ARCO_OCEAN[@]}" progress --state-file "${PROGRESS_FILE}" --publish "${STATUS_URL}" \
-        "$@" >> "${LOG_DIR}/progress.log" 2>&1; then
-        echo "Warning: the progress ($1) could not be published: see ${LOG_DIR}/progress.log." >&2
-    fi
-}
-
-# Whatever ends the script (its exits, an error, a signal it can trap), the progress says how.
-# shellcheck disable=SC2329  # run by the EXIT trap, set with --status-url only
-on_exit() {
-    local code=$?
-    heartbeat_stop
-    if [[ ${code} -eq 0 ]]; then
-        progress end finished
-    elif [[ ${code} -eq ${NOT_PUBLISHED} ]]; then
-        progress end failed --detail "Stopped at a forecast run not published yet: the runs before are stored."
-    else
-        progress end failed --detail "The download stopped (exit status ${code}): rerun it with --resume."
-    fi
-}
-
-if [[ -n "${STATUS_URL}" ]]; then
-    arco_ocean_command
-    PROGRESS_START=()
-    if [[ "${EXTEND}" == false ]]; then
-        PROGRESS_START=(--start "${START_DATE}")
-    fi
-    # Before the start: a download stopped while it starts ends its progress too.
-    trap on_exit EXIT
-    trap 'exit 130' INT
-    trap 'exit 143' TERM
-    progress start --name "${NAME}" --repo "${OUTPUT}" --end "${END_DATE}" \
-        --heartbeat-seconds "${HEARTBEAT}" "${PROGRESS_START[@]+"${PROGRESS_START[@]}"}"
-    heartbeat_start "${HEARTBEAT}" progress beat
+# The progress (--status-url) and the alert (--alert); whatever ends the script (its exits, an
+# error, a signal it can trap), they say how.
+PROGRESS_START=()
+if [[ "${EXTEND}" == false ]]; then
+    PROGRESS_START=(--start "${START_DATE}")
 fi
+progress_run download "${NAME}" "${OUTPUT}" --end "${END_DATE}" \
+    "${PROGRESS_START[@]+"${PROGRESS_START[@]}"}"
 
 STATUS=0
 for (( attempt=1; attempt<=ATTEMPTS; attempt++ )); do

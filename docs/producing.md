@@ -5,14 +5,15 @@ every later extension, and the fingerprint of the recipe recorded in each commit
 
 ```bash
 # The whole period, at one resolution (DATA_ROOT/historical/res=0p25; about four days on the
-# project machine), its progress on the web page.
+# project machine), its progress on the web page, a failure reported as a GitHub issue.
 scripts/download.sh --bind /data --start 1993-01-01 --end 2026-07-01 \
-    --status-url s3://ogs-arco-ocean/status/historical/res=0p25.json historical_res-0p25
+    --status-url s3://ogs-arco-ocean/status/historical/res=0p25.json --alert historical_res-0p25
 # Later: the days after the last stored one, as a new version, once every source has them as
 # final data (ERA5 lags by about three months).
 scripts/download.sh --bind /data --extend --end 2026-10-01 historical_res-0p25
-# The statistics of a resolution (DATA_ROOT/statistics/res=0p25).
-scripts/climatology.sh --bind /data historical_res-0p25
+# The statistics of a resolution (DATA_ROOT/statistics/res=0p25), the same way.
+scripts/climatology.sh --bind /data \
+    --status-url s3://ogs-arco-ocean/status/statistics/res=0p25.json --alert historical_res-0p25
 ```
 
 The outputs are `DATA_ROOT/<product>/res=<res>`, the bucket's layout with
@@ -57,6 +58,20 @@ included): an extension counts what the repository held, a `--replace` does not.
 repository's path and what identifies the run stay in the state file,
 `LOG_DIR/progress_RECIPE.json`. A download killed outright stops updating it, and the
 page calls it stale. A failure to publish it never stops the download (`LOG_DIR/progress.log`).
+
+`scripts/climatology.sh --status-url` publishes the statistics' state the same way
+(`arco-ocean progress --kind statistics`), at `status/statistics/res=<res>.json`: computing,
+finished (with the time of their commit) or failed; written in one commit at the end, they have
+no progress to show.
+
+With `--alert`, both scripts report how they end on GitHub (`scripts/alert.sh`, in the
+background, as the forecast collection's alerts, with the same token, see
+[Forecasts](forecasts.md)): a failure (with the exit status, an interruption included) comments on
+the open issue of that recipe, labelled `download-alert` or `statistics-alert` and titled
+"Download RECIPE failed" or "Statistics RECIPE failed", or opens one; a run that succeeds closes
+that recipe's open issues. The issue shows the progress's public summary, never logs. A run killed
+outright, or the machine down, reports nothing: the page calls it stale. A report that fails is
+logged in `LOG_DIR/alert.log`.
 
 Each commit of a repository records how it was made, in its metadata: the version and commit of
 arco-make, the versions of the packages that decide the values, and the recipe's fingerprint.

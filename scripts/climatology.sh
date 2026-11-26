@@ -9,6 +9,10 @@
 #
 # Reads the dataset <product>/res=<res> and writes statistics/res=<res>, one Icechunk repository
 # with the groups climatology and anomaly_std, from a recipe named <product>_res-<res>.
+#
+# With --status-url, the computation publishes its state for the web page (computing, finished,
+# failed: written in one commit at the end, it has no progress); with --alert, a failure opens a
+# GitHub issue (lib/common.sh, progress_run).
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/common.sh
@@ -40,6 +44,7 @@ DESCRIPTION
                                 with the years, beyond the project VM's at 0.25 deg).
         --streaming             The default (accepted, as before).
         --dask-setup SETUP      arco-make's Dask scheduler (default: threads).
+$(progress_usage statistics)
 $(common_usage climatology)
         -h, --help              Show this help.
 EOF
@@ -51,10 +56,13 @@ OUTPUT=""
 STREAMING=true
 REPLACE=false
 DASK_SETUP="threads"
+progress_defaults
 POSITIONAL_ARGS=()
 
 while [[ $# -gt 0 ]]; do
     common_option "$@"
+    if [[ ${SHIFT_BY} -gt 0 ]]; then shift "${SHIFT_BY}"; continue; fi
+    progress_option "$@"
     if [[ ${SHIFT_BY} -gt 0 ]]; then shift "${SHIFT_BY}"; continue; fi
     case "$1" in
         --input|--input=*) option_value "$@"; INPUT="${VALUE}"; shift "${SHIFT_BY}" ;;
@@ -79,6 +87,7 @@ if [[ -z "${RECIPE}" || ${#POSITIONAL_ARGS[@]} -gt 1 ]]; then
     usage >&2
     exit 1
 fi
+positive_integer --heartbeat "${HEARTBEAT}"
 
 enter_project
 resolve_recipe climatology "${RECIPE}"
@@ -109,6 +118,7 @@ else
 fi
 
 echo "Statistics of ${INPUT} to ${OUTPUT}, log: ${LOG_FILE} (started $(date -u), host $(hostname))"
+progress_run statistics "${NAME}" "${OUTPUT}"
 "${RUN_CMD[@]}" compute-climatology "${FLAGS[@]}" -- \
     "${CONFIG_PATH}" "${INPUT}" "${OUTPUT}" >> "${LOG_FILE}" 2>&1
 STATUS=$?
