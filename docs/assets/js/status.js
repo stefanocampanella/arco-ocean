@@ -434,12 +434,11 @@ export function assessRuns(entries, now = Date.now(), card = "historical") {
 // --- The dashboard -------------------------------------------------------------------------------
 
 const REFRESH_MS = 60 * 1000;
-const ICONS = { downloading: "⟳", finished: "✓", stale: "!", aborted: "✕", unknown: "?" };
 
 const MARKUP = `
   <div class="status-card" data-status="unknown" aria-live="polite">
     <div class="status-head">
-      <span class="status-icon" aria-hidden="true">?</span>
+      <span class="status-icon" aria-hidden="true"></span>
       <span class="status-label">Checking…</span>
     </div>
     <p class="status-detail">Reading the heartbeat.</p>
@@ -465,7 +464,7 @@ const MARKUP = `
 const PROGRESS_MARKUP = `
   <div class="status-card" data-status="unknown" aria-live="polite">
     <div class="status-head">
-      <span class="status-icon" aria-hidden="true">?</span>
+      <span class="status-icon" aria-hidden="true"></span>
       <span class="status-label">Checking…</span>
     </div>
     <p class="status-detail">Reading the progress.</p>
@@ -485,7 +484,7 @@ const PROGRESS_MARKUP = `
 const STATISTICS_MARKUP = `
   <div class="status-card" data-status="unknown" aria-live="polite">
     <div class="status-head">
-      <span class="status-icon" aria-hidden="true">?</span>
+      <span class="status-icon" aria-hidden="true"></span>
       <span class="status-label">Checking…</span>
     </div>
     <p class="status-detail">Reading the state.</p>
@@ -544,7 +543,6 @@ export function show(el, heartbeat, now) {
   const verdict = assess(heartbeat, now);
   const field = (name) => el.querySelector(`[data-field="${name}"]`);
   el.querySelector(".status-card").dataset.status = verdict.status;
-  el.querySelector(".status-icon").textContent = ICONS[verdict.status];
   el.querySelector(".status-label").textContent = verdict.label;
   el.querySelector(".status-detail").textContent = verdict.detail;
 
@@ -600,7 +598,6 @@ function unshown() {
 // The card's headline, as judged.
 function showHeadline(el, verdict) {
   el.querySelector(".status-card").dataset.status = verdict.status;
-  el.querySelector(".status-icon").textContent = ICONS[verdict.status];
   el.querySelector(".status-label").textContent = verdict.label;
   el.querySelector(".status-detail").textContent = verdict.detail;
 }
