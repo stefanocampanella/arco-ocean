@@ -12,15 +12,16 @@ step = "32D"
 # errors) is redone, after 2, 4, 8, 16 and 32 minutes: an hour of outage of a source per block
 # (arco-make's default: 15 minutes). scripts/download.sh then resumes the run (--attempts), so
 # a few hours in all; an error that keeps coming back still shows within hours.
-# An attempt still running after an hour ends the run (exit status 124, every thread's stack in
-# the log), which scripts/download.sh resumes: for a wait nothing else ends (27 Nov 2026, the
-# 0.25 deg download stood idle 3 h in a block). A block takes about 13 minutes at any resolution,
-# the first about 30. Left out of the fingerprint: a run resumes with another value.
+# An attempt still running after 90 minutes ends the run (exit status 124, every thread's stack
+# in the log), which scripts/download.sh resumes: for a wait nothing else ends (27 Nov 2026, the
+# 0.25 deg download stood idle 3 h in a block). Blocks took 14 minutes (median of 152 at 0.25
+# deg), at most 34 (the first): a slow day still passes. Needs arco-make 0.2.1 or later (0.2.0
+# refuses the key). Left out of the fingerprint: a run resumes with another value.
 [retries]
 attempts = 6
 wait = "2min"
 max_wait = "1h"
-block_timeout = "1h"
+block_timeout = "90min"
 
 # The target grid of every regrid step, named by them.
 [grids.target]

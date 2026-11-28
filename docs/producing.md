@@ -38,10 +38,14 @@ machine). Otherwise arco-make stops at once, its `TMPDIR` "not an existing, writ
 
 A block that fails with a transient error (a timeout, a dropped connection, a server error) is
 redone, as the recipe's `[retries]` say: a historical block waits out an hour of outage of a
-source, a forecast run a quarter of an hour. A historical block still running after an hour
-(`block_timeout`; a block takes about 13 minutes) ends the run, with every thread's stack in the
-log: a wait nothing else ends. A run that fails or ends so is resumed by `scripts/download.sh`
-(`--attempts`); for the forecasts, 6 times, 30 minutes apart, for each resolution. arco-make plans chunks of up to Dask's `array.chunk-size`: on the project machine,
+source, a forecast run a quarter of an hour. A historical block still running after 90 minutes
+(`block_timeout`, arco-make 0.2.1 or later; a block takes about 14 minutes, at most 34) ends the
+run, with every thread's stack in the log: a wait nothing else ends. A run that fails or ends so
+is resumed by `scripts/download.sh`, until `--attempts` runs in a row commit no block (3; a run
+that commits blocks starts the count again); for the forecasts, 6 times, 30 minutes apart, for
+each resolution.
+
+arco-make plans chunks of up to Dask's `array.chunk-size`: on the project machine,
 `DASK_ARRAY__CHUNK_SIZE=256MiB` in arco-make's settings file (`~/.arcomakerc`), the fastest
 there (Dask's default is 128 MiB).
 
