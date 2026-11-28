@@ -49,6 +49,25 @@ test("a running download silent for three updates is stale", () => {
   assert.equal(assessProgress(slow, NOW).status, "downloading");
 });
 
+test("a running download with no block committed for an hour is stalled", () => {
+  // Reporting (its heartbeat recent), its last block at 12:20: stalled after 13:20.
+  const at = (time) => Date.parse(`2026-11-24T${time}Z`);
+  const fresh = (now) => progress({ updated_at: new Date(now - 60 * 1000).toISOString() });
+  assert.equal(assessProgress(fresh(at("13:20:00")), at("13:20:00")).status, "downloading");
+  const verdict = assessProgress(fresh(at("16:41:00")), at("16:41:00"));
+  assert.equal(verdict.status, "stale");
+  assert.equal(verdict.label, "Stalled");
+  assert.match(verdict.detail, /^No block committed for 4 h 21 min, though the download still reports/);
+  assert.match(verdict.detail, /stored up to 1997-03-13 \(12 %\)/);
+  // Before its first block, from the run's start (09:00 on 20 Nov).
+  const first = progress({ done_until: null, last_commit_at: null, updated_at: "2026-11-20T09:59:00Z" });
+  assert.equal(assessProgress(first, Date.parse("2026-11-20T10:00:00Z")).status, "downloading");
+  const late = { ...first, updated_at: "2026-11-20T10:01:00Z" };
+  assert.equal(assessProgress(late, Date.parse("2026-11-20T10:02:00Z")).label, "Stalled");
+  // A silent heartbeat is told first: the run is gone, not stuck.
+  assert.equal(assessProgress(progress({ updated_at: "2026-11-24T12:28:00Z" }), at("16:41:00")).label, "Stale");
+});
+
 test("a download without a block yet, or whose repository was not read", () => {
   const first = assessProgress(progress({ done_until: null }), NOW);
   assert.equal(first.detail, "Writing the first block.");

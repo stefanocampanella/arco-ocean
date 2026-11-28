@@ -57,7 +57,8 @@ resolution that needs attention first: failed, then stale, then downloading.
 
 States: **downloading** (updated recently), **finished**, **failed** (the download stopped; it
 is resumed by hand), **stale** (no update for more than 15 minutes, without an end: the machine
-down or the process killed).
+down or the process killed), **stalled** (updated, but no block committed for more than an hour:
+the download stuck, or resuming after a failure; shown in the colour of stale).
 
 ## Statistics
 

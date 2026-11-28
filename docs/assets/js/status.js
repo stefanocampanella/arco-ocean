@@ -40,6 +40,21 @@ const MIN_SILENCE = 15 * MINUTE;
 // recipes' `missing_after`, which the heartbeat publishes (two days if it does not).
 const DEFAULT_MISSING_AFTER_DAYS = 2;
 
+// A running download whose heartbeat goes on is stalled when no block has been committed for an
+// hour (blocks take minutes; the first, with the run's setup, about half an hour at 0.25°): its
+// script still reports, arco-make waits on something that does not come (27 Nov 2026: an upload
+// to S3 left unanswered for hours).
+const STALL_AFTER = HOUR;
+
+// How long a running download has committed no block (since it started, before its first), if
+// for more than STALL_AFTER. Otherwise null. A retry of the script (--resume) keeps its start: until
+// its first block, the time counts from the block before.
+export function stalledFor(progress, now) {
+  const since = Date.parse(progress.last_commit_at ?? progress.started_at);
+  if (Number.isNaN(since)) return null;
+  return now - since > STALL_AFTER ? now - since : null;
+}
+
 // How long a running document (a heartbeat, a progress) has been silent, if for more than three
 // beats (at least 15 minutes): its run stopped without reporting. Otherwise null.
 export function staleFor(doc, now) {
@@ -290,6 +305,17 @@ export function assessProgress(progress, now = Date.now()) {
           `No update for ${duration(silence)}: the download stopped without reporting (the ` +
           `machine down or the process killed)${done ? `, stored ${done}` : ""}. Rerun it with ` +
           "--resume (--extend --resume for an extension).",
+      };
+    }
+    const stall = stalledFor(progress, now);
+    if (stall !== null) {
+      return {
+        status: "stale",
+        label: "Stalled",
+        detail:
+          `No block committed for ${duration(stall)}, though the download still reports: it is ` +
+          `stuck, or resuming after a failure${done ? `; stored ${done}` : ""}. If its log is ` +
+          "silent too, stop arco-make: download.sh resumes it (while attempts remain).",
       };
     }
     return {
