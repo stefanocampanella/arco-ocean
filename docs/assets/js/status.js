@@ -46,12 +46,17 @@ const DEFAULT_MISSING_AFTER_DAYS = 2;
 // to S3 left unanswered for hours).
 const STALL_AFTER = HOUR;
 
-// How long a running download has committed no block (since it started, before its first), if
-// for more than STALL_AFTER. Otherwise null. A retry of the script (--resume) keeps its start: until
-// its first block, the time counts from the block before.
+// How long a running download has committed no block, if for more than STALL_AFTER; otherwise
+// null. Counted from its last commit or its start, whichever is later: a download started again
+// with --resume shows the failed run's last commit, maybe days old, and has its first block to
+// write. A retry within one run of the script keeps its start: until the retry's first block, the
+// time counts from the block before.
 export function stalledFor(progress, now) {
-  const since = Date.parse(progress.last_commit_at ?? progress.started_at);
-  if (Number.isNaN(since)) return null;
+  const times = [progress.last_commit_at, progress.started_at]
+    .map((time) => Date.parse(time ?? ""))
+    .filter((time) => !Number.isNaN(time));
+  if (times.length === 0) return null;
+  const since = Math.max(...times);
   return now - since > STALL_AFTER ? now - since : null;
 }
 

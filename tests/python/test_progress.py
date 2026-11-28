@@ -124,6 +124,13 @@ def test_a_resumed_run_counts_from_its_next_block(tmp_path) -> None:
   assert stored_until(state) == datetime.date(1993, 3, 6) and state.branch == failed.branch
 
 
+def resume(state: progress.ProgressState) -> progress.ProgressState:
+  """What `arco-ocean progress resume` does to the state."""
+  progress.refresh(state, resume=True)
+  assert state.error is None
+  return state
+
+
 def test_a_resumed_run_said_so_counts_at_once(tmp_path) -> None:
   """`resume` (download.sh, before a run with --resume): the failed run's blocks count before its
   next (on 28 Nov the page showed a download resumed after 152 blocks as writing its first)."""
@@ -131,35 +138,42 @@ def test_a_resumed_run_said_so_counts_at_once(tmp_path) -> None:
   complete(path, ("1993-01-01", "1993-02-02"))
   failed = Run(path)
   failed.block("1993-02-02", "1993-03-06")
-  state = follow(path)
-  progress.resumed(state)
-  assert state.branch == failed.branch
-  assert stored_until(state) == datetime.date(1993, 3, 6)
+  state = resume(follow(path))
+  assert state.branch == failed.branch and state.done_until == datetime.date(1993, 3, 6)
   failed.block("1993-03-06", "1993-04-07")
   assert stored_until(state) == datetime.date(1993, 4, 7)
 
 
 def test_resume_finds_only_the_run_arco_make_resumes(tmp_path) -> None:
   """None without a failed run, of another command, or one main moved past (arco-make refuses
-  those); a branch already known stays."""
+  those); a branch already known (an earlier attempt of the script run) stays."""
   path = tmp_path / "repo"
-  state = follow(path)
-  progress.resumed(state)  # no repository
+  assert resume(follow(path)).branch is None  # no repository
   complete(path, ("1993-01-01", "1993-02-02"))
-  progress.resumed(follow(path))
+  assert resume(follow(path)).branch is None
   Run(path, "download-extend").block("1993-02-02", "1993-03-06")
-  state = follow(path)
-  progress.resumed(state)
-  assert state.branch is None
+  assert resume(follow(path)).branch is None
   stale = Run(path)
   stale.block("1993-01-01", "1993-01-15")
   complete(path, ("1993-01-01", "1993-03-06"))  # main moved: the failed run cannot be promoted
+  assert resume(follow(path)).branch is None
   state = follow(path)
-  progress.resumed(state)
-  assert state.branch is None
   state.branch = "run/known"
-  progress.resumed(state)
+  progress.resumed(state, None)
   assert state.branch == "run/known"
+
+
+def test_resume_takes_the_newest_failed_run_of_either_command(tmp_path) -> None:
+  """As arco-make: the newest failed run, download or extension; a download resumes it only if
+  it is a download (a newer failed extension refuses it, review of #45)."""
+  path = tmp_path / "repo"
+  complete(path, ("1993-01-01", "1993-02-02"))
+  download = Run(path)
+  download.block("1993-01-01", "1993-01-15")
+  extension = Run(path, "download-extend")
+  extension.block("1993-02-02", "1993-03-06")
+  assert resume(follow(path)).branch is None
+  assert resume(follow(path, extension=True)).branch == extension.branch
 
 
 def test_an_extension_counts_what_main_holds(tmp_path) -> None:
@@ -248,7 +262,7 @@ def test_resume_publishes_the_failed_runs_blocks(tmp_path, files) -> None:
   assert run(state, published, "start", *args)["done_until"] is None
   document = run(state, published, "resume")
   assert document["done_until"] == "1993-02-02" and document["last_commit_at"] is not None
-  # Once known, the branch stays (a later run of the script resumes it again).
+  # Once known, the branch stays (a later attempt of the script run resumes it again).
   assert run(state, published, "resume")["done_until"] == "1993-02-02"
 
 

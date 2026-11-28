@@ -176,18 +176,19 @@ def find_branch(state: "ProgressState", repo: Any) -> str | None:
   return max(moved)[1] if moved else None
 
 
-def resumed(state: "ProgressState") -> None:
-  """The download resumes the newest failed run of its command, as arco-make's `--resume` finds
-  it (`waiting_run`: by exact command, still promotable): that run's branch is this download's.
-  Nothing changes once a branch is known (an earlier run of the script found it), nor without
-  such a run (arco-make then refuses to resume)."""
+def resumed(state: "ProgressState", repo: Any) -> None:
+  """The download resumes the failed run arco-make's `--resume` picks: the newest failed run of
+  either command (`waiting_run`, as its `_waiting_run` asks), which it resumes only if of the
+  download's own command and still promotable; that run's branch is then this download's.
+  Nothing changes once a branch is known (an earlier attempt of this script run found it), nor
+  without such a run (arco-make then refuses to resume). arco-make also refuses another recipe's
+  run, which the progress cannot tell: its blocks then show until the attempts run out."""
   from arcomake import icechunk_utils
 
   if state.kind != "download" or state.branch is not None:
     return
-  repo = icechunk_utils.existing_repository(state.repository)
-  waiting = icechunk_utils.waiting_run(repo, command(state.extension))
-  if waiting is not None and waiting.current:
+  waiting = icechunk_utils.waiting_run(repo, command(False), command(True))
+  if waiting is not None and waiting.current and waiting.command == command(state.extension):
     state.branch = waiting.branch
 
 
@@ -235,10 +236,10 @@ def read_statistics(path: str, finished: bool) -> Reading:
   return Reading(last_commit_at=tip(repo, icechunk_utils.BRANCH).written_at)
 
 
-def refresh(state: ProgressState, finished: bool = False) -> None:
+def refresh(state: ProgressState, finished: bool = False, resume: bool = False) -> None:
   """Read the progress again into `state` (the repository opened once; for a download, its first
-  read too, until it succeeds); a failure is recorded, not raised: the progress never stops a
-  run."""
+  read too, until it succeeds; with `resume`, the failed run it resumes, `resumed`); a failure is
+  recorded, not raised: the progress never stops a run."""
   from arcomake import icechunk_utils
 
   try:
@@ -246,6 +247,8 @@ def refresh(state: ProgressState, finished: bool = False) -> None:
       reading = read_statistics(state.repository, finished)
     else:
       repo = icechunk_utils.existing_repository(state.repository)
+      if resume:
+        resumed(state, repo)
       if not state.ready:
         prepare(state, repo)
       reading = read_progress(state, repo, finished)
@@ -351,11 +354,7 @@ def resume(files: Files) -> None:
     state = require_started(state, files, "run")
     if state.state != "running":
       return None
-    try:
-      resumed(state)
-    except Exception as error:  # noqa: BLE001 (the progress never stops a run: a beat finds it)
-      click.echo(f"The failed run could not be read: {failure(error)}", err=True)
-    refresh(state)
+    refresh(state, resume=True)
     return state
 
   update_state(files, load, change, fresh=False)
