@@ -11,7 +11,9 @@
 # commit on the run's own branch; the repository's `main` moves to the new version only when
 # every block is written. If the run fails, it is attempted again with `arco-make download
 # --resume` (`--extend --resume` for an extension), which keeps the blocks already committed and
-# writes the others (up to --attempts runs in all). A forecast download stopped at a run its
+# writes the others, until --attempts runs in a row have committed no block (a run that commits
+# blocks before failing starts the count again: a download of days is not stopped by failures
+# far apart, each a block apart, and a failure that recurs at once still stops it). A forecast download stopped at a run its
 # sources have not published yet (exit status 75: the runs before are stored) is attempted again
 # with --extend. Transient network errors are already retried inside arco-make, block by block
 # (the recipe's [retries]).
@@ -50,7 +52,9 @@ DESCRIPTION
                                 version (arco-make --extend; resumed with --resume).
         --replace               Write a new version of an existing output (arco-make --replace).
         --resume                Continue a run that failed earlier (arco-make --resume).
-        --attempts N            Runs in all, the later ones resuming (default: 3).
+        --attempts N            Runs in a row that commit no block before giving up, the later
+                                ones resuming (default: 3); one that commits blocks starts the
+                                count again.
         --retry-delay SECONDS   Wait between runs (default: 60).
 $(progress_usage historical)
 $(common_usage download)
@@ -150,7 +154,11 @@ progress_run download "${NAME}" "${OUTPUT}" "${AGAIN}" --end "${END_DATE}" \
     "${PROGRESS_START[@]+"${PROGRESS_START[@]}"}"
 
 STATUS=0
-for (( attempt=1; attempt<=ATTEMPTS; attempt++ )); do
+attempt=0
+# Runs in a row that committed no block: --attempts of them end the script.
+FRUITLESS=0
+while (( FRUITLESS < ATTEMPTS )); do
+    attempt=$(( attempt + 1 ))
     FLAGS=(--no-progress --log-level="${LOG_LEVEL}" --end="${END_DATE}")
     MODE=()
     if [[ ${STATUS} -eq ${NOT_PUBLISHED} ]]; then
@@ -169,7 +177,7 @@ for (( attempt=1; attempt<=ATTEMPTS; attempt++ )); do
     elif [[ "${REPLACE}" == true ]]; then
         MODE+=(--replace)
     fi
-    echo "Run ${attempt}/${ATTEMPTS} ${MODE[*]+"${MODE[*]}"}"
+    echo "Run ${attempt} ${MODE[*]+"${MODE[*]}"}"
     # Where this run's lines start in the log (none yet on the first run: the shell, not wc,
     # reported the missing file).
     RUN_START=0
@@ -177,7 +185,7 @@ for (( attempt=1; attempt<=ATTEMPTS; attempt++ )); do
         RUN_START=$(wc -l < "${LOG_FILE}")
     fi
     {
-        echo "==== run ${attempt}/${ATTEMPTS} ${MODE[*]+"${MODE[*]}"} ($(date -u)) ===="
+        echo "==== run ${attempt} ${MODE[*]+"${MODE[*]}"} ($(date -u)) ===="
         "${RUN_CMD[@]}" download "${FLAGS[@]}" "${MODE[@]+"${MODE[@]}"}" -- "${CONFIG_PATH}" "${OUTPUT}"
     } >> "${LOG_FILE}" 2>&1
     STATUS=$?
@@ -187,10 +195,17 @@ for (( attempt=1; attempt<=ATTEMPTS; attempt++ )); do
         echo "Download of ${NAME} finished: ${OUTPUT} ($(date -u))."
         exit 0
     fi
+    # The blocks this run committed (arco-make logs "Committed SNAPSHOT to OUTPUT" for each).
+    COMMITTED=$(tail -n "+$((RUN_START + 1))" "${LOG_FILE}" | grep -c ": Committed [0-9A-Z]* to " || true)
+    if (( COMMITTED > 0 )); then
+        FRUITLESS=0
+    else
+        FRUITLESS=$(( FRUITLESS + 1 ))
+    fi
     if [[ ${STATUS} -eq ${NOT_PUBLISHED} ]]; then
         echo "Run ${attempt}: a forecast run is not published yet; the runs before are stored."
     else
-        echo "Run ${attempt} failed (exit code ${STATUS}): see ${LOG_FILE}."
+        echo "Run ${attempt} failed (exit code ${STATUS}) after ${COMMITTED} block(s) committed: see ${LOG_FILE}."
     fi
     # A failed check of the recipe's [checks] fails again on the same data: no further attempt.
     if tail -n "+$((RUN_START + 1))" "${LOG_FILE}" | grep -q "A check of \[checks\] failed"; then
@@ -204,13 +219,13 @@ for (( attempt=1; attempt<=ATTEMPTS; attempt++ )); do
         echo "Run 1: an earlier run failed and waits: resuming it."
         continue
     fi
-    if [[ ${attempt} -lt ${ATTEMPTS} ]]; then
+    if (( FRUITLESS < ATTEMPTS )); then
         sleep "${RETRY_DELAY}"
     fi
 done
 if [[ ${STATUS} -eq ${NOT_PUBLISHED} ]]; then
-    echo "Download of ${NAME}: a forecast run is still not published after ${ATTEMPTS} runs; the runs before are stored, the next collection (--extend) continues." >&2
+    echo "Download of ${NAME}: a forecast run is still not published after ${ATTEMPTS} runs that stored none; the runs before are stored, the next collection (--extend) continues." >&2
     exit "${NOT_PUBLISHED}"
 fi
-echo "Download of ${NAME} failed after ${ATTEMPTS} runs (see ${LOG_FILE}): rerun this command with --resume to continue, if the log shows a run waiting." >&2
+echo "Download of ${NAME} failed: ${ATTEMPTS} runs in a row committed no block (see ${LOG_FILE}); rerun this command with --resume to continue, if the log shows a run waiting." >&2
 exit 1

@@ -120,3 +120,37 @@ resume() {
     run calls
     assert_output --partial " ${PROJECT}/configs/download/forecast_res-1p0.toml ${PROJECT}/data/forecast/res=1p0"
 }
+
+# A stand-in arco-make whose first N runs commit a block each, then fail; later runs fail at
+# once (none) or succeed (STATUS 0).
+committing_then() {
+    stub_at "${PROJECT}/venv/bin/arco-make" "
+runs=\$(wc -l < \"\${CALLS}\")
+if (( runs <= $1 )); then
+    echo 'INFO - 2026-11-28T00:00:00: Committed ABCDEFGHIJKLMNOPQRST to out (run/x): download [a, b)'
+    exit 1
+fi
+exit $2"
+}
+
+@test "a run that committed blocks before failing starts the count again" {
+    # A download of days: failures far apart, each after progress, do not stop it (review of #44).
+    committing_then 4 0
+    DATA_ROOT="${PROJECT}/root" download --extend --end 2026-11-25 --attempts 2 --retry-delay 0 \
+        forecast_res-1p0
+    assert_success
+    assert_output --partial "after 1 block(s) committed"
+    run calls
+    assert_equal "${#lines[@]}" 5
+}
+
+@test "--attempts runs in a row that commit nothing end it" {
+    committing_then 1 1
+    DATA_ROOT="${PROJECT}/root" download --extend --end 2026-11-25 --attempts 2 --retry-delay 0 \
+        forecast_res-1p0
+    assert_failure 1
+    assert_output --partial "2 runs in a row committed no block"
+    # The first run committed a block; the two after it nothing.
+    run calls
+    assert_equal "${#lines[@]}" 3
+}

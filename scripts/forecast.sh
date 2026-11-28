@@ -36,7 +36,8 @@ DESCRIPTION
         --start DATE            Backfill from this run (YYYY-MM-DD) into new repositories, instead
                                 of extending existing ones (the first time).
         --end DATE              The day after the last run (default: tomorrow, UTC: today's run).
-        --attempts N            Runs per resolution, the later ones resuming (default: 6).
+        --attempts N            Runs per resolution that store no run before giving up, the
+                                later ones resuming (default: 6).
         --retry-delay SECONDS   Wait between them (default: 1800: a late release).
         --project-dir DIR       Project root directory (default: current working directory).
         --log-dir DIR           Where the logs go (default: \${PROJECT_ROOT}/logs/forecast).
