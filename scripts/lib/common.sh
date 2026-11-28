@@ -21,7 +21,7 @@
 # read: it holds secrets.
 
 # The image of the arco-make version pinned in pyproject.toml (tests/python/test_image.py).
-DEFAULT_IMAGE="oras://ghcr.io/stefanocampanella/arco-make:v0.2.0"
+DEFAULT_IMAGE="oras://ghcr.io/stefanocampanella/arco-make:v0.2.1"
 # arco-make's and download.sh's exit status when a forecast run is not published yet: the runs
 # before it are stored.
 NOT_PUBLISHED=75

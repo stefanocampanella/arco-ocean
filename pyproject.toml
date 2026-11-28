@@ -8,7 +8,7 @@ requires-python = ">=3.13"
 dependencies = [
     # The release whose image the scripts run (tests/python/test_image.py). It brings xarray,
     # icechunk and botocore, which read the forecast repositories and publish the heartbeat.
-    "arcomake @ git+https://github.com/stefanocampanella/arco-make.git@v0.2.0",
+    "arcomake @ git+https://github.com/stefanocampanella/arco-make.git@v0.2.1",
     "click",
     "pydantic>=2.11",
 ]

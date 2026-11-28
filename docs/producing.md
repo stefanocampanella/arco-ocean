@@ -81,5 +81,5 @@ Each commit of a repository records how it was made, in its metadata: the versio
 arco-make, the versions of the packages that decide the values, and the recipe's fingerprint.
 
 The scripts run arco-make from the image of the version the checks pin (`pyproject.toml`), now
-`oras://ghcr.io/stefanocampanella/arco-make:v0.2.0`, which stays as published; `--image` names
+`oras://ghcr.io/stefanocampanella/arco-make:v0.2.1`, which stays as published; `--image` names
 another, `--virtual-env` a Python environment instead.

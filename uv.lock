@@ -259,7 +259,7 @@ notebooks = [
 
 [package.metadata]
 requires-dist = [
-    { name = "arcomake", git = "https://github.com/stefanocampanella/arco-make.git?rev=v0.2.0" },
+    { name = "arcomake", git = "https://github.com/stefanocampanella/arco-make.git?rev=v0.2.1" },
     { name = "click" },
     { name = "pydantic", specifier = ">=2.11" },
 ]
@@ -298,8 +298,8 @@ notebooks = [
 
 [[package]]
 name = "arcomake"
-version = "0.2.0"
-source = { git = "https://github.com/stefanocampanella/arco-make.git?rev=v0.2.0#06911aeeee7440e8495050c5371f0542a451752b" }
+version = "0.2.1"
+source = { git = "https://github.com/stefanocampanella/arco-make.git?rev=v0.2.1#06169ec8e8336d693e4fe7382b395b14e5f77320" }
 dependencies = [
     { name = "aiohttp" },
     { name = "botocore", extra = ["crt"] },
