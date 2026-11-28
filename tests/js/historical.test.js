@@ -68,6 +68,17 @@ test("a running download with no block committed for an hour is stalled", () => 
   assert.equal(assessProgress(progress({ updated_at: "2026-11-24T12:28:00Z" }), at("16:41:00")).label, "Stale");
 });
 
+test("a download started again with --resume counts from its start, not the failed run's commit", () => {
+  // The failed run's last block at 12:20 on 24 Nov; started again at 09:00 the next day.
+  const resumed = (now) =>
+    progress({ started_at: "2026-11-25T09:00:00Z", updated_at: new Date(now - 60 * 1000).toISOString() });
+  const at = (time) => Date.parse(`2026-11-25T${time}Z`);
+  assert.equal(assessProgress(resumed(at("09:30:00")), at("09:30:00")).status, "downloading");
+  const verdict = assessProgress(resumed(at("10:30:00")), at("10:30:00"));
+  assert.equal(verdict.label, "Stalled");
+  assert.match(verdict.detail, /^No block committed for 1 h 30 min/);
+});
+
 test("a download without a block yet, or whose repository was not read", () => {
   const first = assessProgress(progress({ done_until: null }), NOW);
   assert.equal(first.detail, "Writing the first block.");

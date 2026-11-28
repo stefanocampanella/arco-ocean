@@ -16,8 +16,12 @@ killed without notice stops beating: the page calls it stale.
 
 Which run is this download's: at its first read, the state records `main`'s tip and the tips of
 the run branches of its command (`download`, or `download-extend` for an extension); the run's
-branch is then the one whose tip moves (a run resumed: from its next block), or a new one. A
-branch left by an earlier run, which a `--replace` leaves as it is, never counts. Before its
+branch is then the one whose tip moves, or a new one. A branch left by an earlier run, which a
+`--replace` leaves as it is, never counts. A download that resumes a failed run (arco-make's
+`--resume`, which continues that run's branch) says so (`resume`, before each such run): the
+failed run's branch is then this download's at once, its blocks counted before the next one is
+committed (without it, from that one: on 28 Nov 2026 the page showed a download resumed after
+152 blocks as writing its first). Before its
 first block, nothing is stored by the download, unless it extends the repository (then what
 `main` holds counts); a download that replaces an output does not show the old one's end. Once
 the run's branch is known, a beat reads only its tip. A first read that fails is made again at
@@ -172,6 +176,22 @@ def find_branch(state: "ProgressState", repo: Any) -> str | None:
   return max(moved)[1] if moved else None
 
 
+def resumed(state: "ProgressState", repo: Any) -> None:
+  """The download resumes the failed run arco-make's `--resume` picks: the newest failed run of
+  either command (`waiting_run`, as its `_waiting_run` asks), which it resumes only if of the
+  download's own command and still promotable; that run's branch is then this download's.
+  Nothing changes once a branch is known (an earlier attempt of this script run found it), nor
+  without such a run (arco-make then refuses to resume). arco-make also refuses another recipe's
+  run, which the progress cannot tell: its blocks then show until the attempts run out."""
+  from arcomake import icechunk_utils
+
+  if state.kind != "download" or state.branch is not None:
+    return
+  waiting = icechunk_utils.waiting_run(repo, command(False), command(True))
+  if waiting is not None and waiting.current and waiting.command == command(state.extension):
+    state.branch = waiting.branch
+
+
 def read_progress(state: "ProgressState", repo: Any, finished: bool = False) -> Reading:
   """The download's progress in `repo` (None: no repository yet). `finished`: the run is
   complete, `main` holds it."""
@@ -216,10 +236,10 @@ def read_statistics(path: str, finished: bool) -> Reading:
   return Reading(last_commit_at=tip(repo, icechunk_utils.BRANCH).written_at)
 
 
-def refresh(state: ProgressState, finished: bool = False) -> None:
+def refresh(state: ProgressState, finished: bool = False, resume: bool = False) -> None:
   """Read the progress again into `state` (the repository opened once; for a download, its first
-  read too, until it succeeds); a failure is recorded, not raised: the progress never stops a
-  run."""
+  read too, until it succeeds; with `resume`, the failed run it resumes, `resumed`); a failure is
+  recorded, not raised: the progress never stops a run."""
   from arcomake import icechunk_utils
 
   try:
@@ -227,6 +247,8 @@ def refresh(state: ProgressState, finished: bool = False) -> None:
       reading = read_statistics(state.repository, finished)
     else:
       repo = icechunk_utils.existing_repository(state.repository)
+      if resume:
+        resumed(state, repo)
       if not state.ready:
         prepare(state, repo)
       reading = read_progress(state, repo, finished)
@@ -318,6 +340,21 @@ def beat(files: Files) -> None:
     if state.state != "running":
       return None
     refresh(state)
+    return state
+
+  update_state(files, load, change, fresh=False)
+
+
+@progress.command()
+@pass_files
+def resume(files: Files) -> None:
+  """The download resumes a failed run (arco-make --resume): its blocks count at once."""
+
+  def change(state: ProgressState | None) -> ProgressState | None:
+    state = require_started(state, files, "run")
+    if state.state != "running":
+      return None
+    refresh(state, resume=True)
     return state
 
   update_state(files, load, change, fresh=False)

@@ -177,6 +177,9 @@ while (( FRUITLESS < ATTEMPTS )); do
     elif [[ "${REPLACE}" == true ]]; then
         MODE+=(--replace)
     fi
+    if [[ " ${MODE[*]-} " == *" --resume "* ]]; then
+        progress_resume
+    fi
     echo "Run ${attempt} ${MODE[*]+"${MODE[*]}"}"
     # Where this run's lines start in the log (none yet on the first run: the shell, not wc,
     # reported the missing file).
