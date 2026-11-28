@@ -16,8 +16,12 @@ killed without notice stops beating: the page calls it stale.
 
 Which run is this download's: at its first read, the state records `main`'s tip and the tips of
 the run branches of its command (`download`, or `download-extend` for an extension); the run's
-branch is then the one whose tip moves (a run resumed: from its next block), or a new one. A
-branch left by an earlier run, which a `--replace` leaves as it is, never counts. Before its
+branch is then the one whose tip moves, or a new one. A branch left by an earlier run, which a
+`--replace` leaves as it is, never counts. A download that resumes a failed run (arco-make's
+`--resume`, which continues that run's branch) says so (`resume`, before each such run): the
+failed run's branch is then this download's at once, its blocks counted before the next one is
+committed (without it, from that one: on 28 Nov 2026 the page showed a download resumed after
+152 blocks as writing its first). Before its
 first block, nothing is stored by the download, unless it extends the repository (then what
 `main` holds counts); a download that replaces an output does not show the old one's end. Once
 the run's branch is known, a beat reads only its tip. A first read that fails is made again at
@@ -172,6 +176,21 @@ def find_branch(state: "ProgressState", repo: Any) -> str | None:
   return max(moved)[1] if moved else None
 
 
+def resumed(state: "ProgressState") -> None:
+  """The download resumes the newest failed run of its command, as arco-make's `--resume` finds
+  it (`waiting_run`: by exact command, still promotable): that run's branch is this download's.
+  Nothing changes once a branch is known (an earlier run of the script found it), nor without
+  such a run (arco-make then refuses to resume)."""
+  from arcomake import icechunk_utils
+
+  if state.kind != "download" or state.branch is not None:
+    return
+  repo = icechunk_utils.existing_repository(state.repository)
+  waiting = icechunk_utils.waiting_run(repo, command(state.extension))
+  if waiting is not None and waiting.current:
+    state.branch = waiting.branch
+
+
 def read_progress(state: "ProgressState", repo: Any, finished: bool = False) -> Reading:
   """The download's progress in `repo` (None: no repository yet). `finished`: the run is
   complete, `main` holds it."""
@@ -317,6 +336,25 @@ def beat(files: Files) -> None:
     # A late beat of an ended download would make it look as if it were running again.
     if state.state != "running":
       return None
+    refresh(state)
+    return state
+
+  update_state(files, load, change, fresh=False)
+
+
+@progress.command()
+@pass_files
+def resume(files: Files) -> None:
+  """The download resumes a failed run (arco-make --resume): its blocks count at once."""
+
+  def change(state: ProgressState | None) -> ProgressState | None:
+    state = require_started(state, files, "run")
+    if state.state != "running":
+      return None
+    try:
+      resumed(state)
+    except Exception as error:  # noqa: BLE001 (the progress never stops a run: a beat finds it)
+      click.echo(f"The failed run could not be read: {failure(error)}", err=True)
     refresh(state)
     return state
 

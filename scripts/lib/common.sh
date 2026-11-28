@@ -344,6 +344,14 @@ progress_run() {
     fi
 }
 
+# The run about to start resumes a failed one (arco-make --resume): its progress counts that
+# run's blocks at once, not from its next (`arco-ocean progress resume`). Nothing without the
+# progress (progress_run: no --status-url nor --alert).
+progress_resume() {
+    if [[ -z "${STATUS_URL}" && "${ALERT}" == false ]]; then return 0; fi
+    progress resume
+}
+
 # A GitHub repository's OWNER/REPO, else exit naming the option. Usage: github_repo OPTION VALUE.
 github_repo() {
     [[ "$2" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die "$1 takes OWNER/REPO (got '$2')."

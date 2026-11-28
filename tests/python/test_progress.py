@@ -124,6 +124,44 @@ def test_a_resumed_run_counts_from_its_next_block(tmp_path) -> None:
   assert stored_until(state) == datetime.date(1993, 3, 6) and state.branch == failed.branch
 
 
+def test_a_resumed_run_said_so_counts_at_once(tmp_path) -> None:
+  """`resume` (download.sh, before a run with --resume): the failed run's blocks count before its
+  next (on 28 Nov the page showed a download resumed after 152 blocks as writing its first)."""
+  path = tmp_path / "repo"
+  complete(path, ("1993-01-01", "1993-02-02"))
+  failed = Run(path)
+  failed.block("1993-02-02", "1993-03-06")
+  state = follow(path)
+  progress.resumed(state)
+  assert state.branch == failed.branch
+  assert stored_until(state) == datetime.date(1993, 3, 6)
+  failed.block("1993-03-06", "1993-04-07")
+  assert stored_until(state) == datetime.date(1993, 4, 7)
+
+
+def test_resume_finds_only_the_run_arco_make_resumes(tmp_path) -> None:
+  """None without a failed run, of another command, or one main moved past (arco-make refuses
+  those); a branch already known stays."""
+  path = tmp_path / "repo"
+  state = follow(path)
+  progress.resumed(state)  # no repository
+  complete(path, ("1993-01-01", "1993-02-02"))
+  progress.resumed(follow(path))
+  Run(path, "download-extend").block("1993-02-02", "1993-03-06")
+  state = follow(path)
+  progress.resumed(state)
+  assert state.branch is None
+  stale = Run(path)
+  stale.block("1993-01-01", "1993-01-15")
+  complete(path, ("1993-01-01", "1993-03-06"))  # main moved: the failed run cannot be promoted
+  state = follow(path)
+  progress.resumed(state)
+  assert state.branch is None
+  state.branch = "run/known"
+  progress.resumed(state)
+  assert state.branch == "run/known"
+
+
 def test_an_extension_counts_what_main_holds(tmp_path) -> None:
   path = tmp_path / "repo"
   complete(path, ("1993-01-01", "1993-02-02"))
@@ -199,6 +237,19 @@ def test_a_download_from_start_to_end(tmp_path, files) -> None:
   # A late beat does not bring an ended download back to life.
   run(state, published, "beat")
   assert published.read_text() == ended
+
+
+def test_resume_publishes_the_failed_runs_blocks(tmp_path, files) -> None:
+  state, published = files
+  repo = tmp_path / "historical" / "res=0p25"
+  failed = Run(repo)
+  failed.block("1993-01-01", "1993-02-02")
+  args = ["--name", "n", "--repo", str(repo), "--start", "1993-01-01", "--end", "2026-07-01"]
+  assert run(state, published, "start", *args)["done_until"] is None
+  document = run(state, published, "resume")
+  assert document["done_until"] == "1993-02-02" and document["last_commit_at"] is not None
+  # Once known, the branch stays (a later run of the script resumes it again).
+  assert run(state, published, "resume")["done_until"] == "1993-02-02"
 
 
 def test_an_extension_starts_where_main_ends(tmp_path, files) -> None:

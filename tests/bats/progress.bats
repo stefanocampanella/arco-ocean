@@ -262,3 +262,14 @@ alerted() {
     run grep "^alert.sh" "${CALLS}"
     assert_line --regexp "^alert.sh --kind statistics --name historical_res-1p0 --state-file .*/logs/climatology/progress_historical_res-1p0.json --exit-status 1 --run-started .* failed$"
 }
+
+@test "a resumed download shows the failed run's blocks before a block of its own" {
+    # On 28 Nov the page showed a download resumed after 152 blocks as writing its first.
+    FAKE_BLOCKS="--running 1993-01-01/1993-02-02" FAKE_CODE=1 download
+    assert_failure 1
+    # Resumed, the stand-in fails again before committing a block.
+    FAKE_CODE=1 download --resume
+    assert_failure 1
+    refute_output --partial "Warning"
+    assert_equal "$(published 'd["state"], d["done_until"]')" "('failed', '1993-02-02')"
+}
